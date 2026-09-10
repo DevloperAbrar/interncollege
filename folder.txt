@@ -1,0 +1,125 @@
+backend-
+  1. config
+        database.js
+        googleDrive.js 
+  2. controllers
+        adminController.js
+        analysticsController.js
+        authController.js
+        mentorController.js
+        studentController.js
+        uploadController.js
+        department.js
+        departmenetController.js
+        deptAdmin.js
+        deptAdminController.js
+  3. middleware
+        auth.js
+        roleCheck.js
+        upload.js
+  4. models
+        BulkUpload.js
+        checkDatabase.js
+        createAdmin.js
+        Submission.js
+        User.js
+        Branch.js
+        Department.js
+  5. routes
+        admin.js
+        analytics.js
+        auth.js
+        googleAuth.js
+        mentor.js
+        student.js
+        upload.js
+        adminLogs.js
+        department.js
+        deptAdmin.js
+        studentProgress.js
+  6. services
+        csvService.js
+        emailService.js
+        excelService.js
+        googleDriveService.js
+  7. uploads
+  8. utils
+        generateToken.js
+        responseHeloper.js
+        validatInput.js
+  9. .env
+  10. server.js
+
+frontend-
+    src
+        1. components
+                admin
+                    AdminDashboard.jsx
+                    BulkUpload.jsx
+                    MentorManagmeent.jsx
+                    StudentManagment.jsx
+                    SystemOverview.jsx
+                    DepartmentManagement.jsx
+                    DeptAdminmanagemetn.jsx
+                auth
+                    Login.jsx
+                    ProtectedRoutes.jsx
+                    Adminlogin.jsx
+                    Callback.jsx
+                common
+                    FileUpload.jsx
+                    Header.jsx
+                    Modal.jsx
+                    Progressindicator.jsx
+                    Sidebar.jsx
+                    Table.jsx
+                deptAdmin     
+                    BranchManagement.jsx
+                    DeptAdminManagement.jsx
+                    MentorManagement.jsx
+                mentor
+                    Addstudents.jsx
+                    AssognedStudents.jsx
+                    MentorDasbhoard.jsx
+                    ProgressMonitoring.jsx
+                    ReviewSubmission.jsx
+                student
+                    CategorySelection.jsx
+                    ChoiceForm.jsx
+                    FinalReportForm.jsx
+                    InternshipForm.jsx
+                    MonthlySubmission.jsx
+                    MPRSubmission.jsx
+                    ProgressView.jsx
+                    ProjectForm.jsx
+                    RegistrationForm.jsx
+                    SemesterChoice.jsx
+                    StudentDashboard.jsx
+                    SubmissionPortal.jsx
+        2. context
+                AuthContext.jsx
+        3. hooks
+                useApi.js
+                useAuth.js
+        4. landing page
+                Analytics.jsx
+                LandingPage.jsx
+        5. pages
+                AboutPage.jsx
+                ContactPage.jsx
+                FeaturePage.jsx
+        6. services
+                adminService.js
+                api.js
+                authService.js
+                menotrService.js
+                studentService.js
+        7. utils
+                constants.js
+                helpers.js
+                validation.js
+        8. App.css
+        9. App.jsx
+        10. index.css
+        11. main.jsx
+    .env   

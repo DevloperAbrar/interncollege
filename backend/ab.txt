@@ -1,0 +1,96 @@
+now this my folder structure "backend/
+├── src/
+│   ├── config/
+│   │   ├── database.js
+│   │   └── googleDrive.js
+│   ├── models/
+│   │   ├── User.js
+│   │   ├── Submission.js
+│   │   └── BulkUpload.js
+│   ├── middleware/
+│   │   ├── auth.js
+│   │   ├── roleCheck.js
+│   │   └── upload.js
+│   ├── controllers/
+│   │   ├── authController.js
+│   │   ├── adminController.js
+│   │   ├── mentorController.js
+│   │   ├── studentController.js
+│   │   └── uploadController.js
+│   ├── routes/
+│   │   ├── auth.js
+│   │   ├── admin.js
+│   │   ├── mentor.js
+│   │   ├── student.js
+│   │   └── upload.js
+│   ├── services/
+│   │   ├── googleDriveService.js
+│   │   ├── emailService.js
+│   │   ├── excelService.js
+│   │   └── csvService.js
+│   └── utils/
+│       ├── generateToken.js
+│       ├── validateInput.js
+│       └── responseHelper.js
+├── uploads/
+├── .env
+├── .gitignore
+├── package.json
+└── server.js
+
+## Frontend "rontend/
+├── public/
+│   ├── index.html
+│   └── favicon.ico
+├── src/
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Header.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── Table.jsx
+│   │   │   ├── Modal.jsx
+│   │   │   ├── FileUpload.jsx
+│   │   │   └── ProgressIndicator.jsx
+│   │   ├── auth/
+│   │   │   ├── Login.jsx
+│   │   │   └── ProtectedRoute.jsx
+│   │   ├── admin/
+│   │   │   ├── AdminDashboard.jsx
+│   │   │   ├── MentorManagement.jsx
+│   │   │   ├── BulkUpload.jsx
+│   │   │   └── SystemOverview.jsx
+│   │   ├── mentor/
+│   │   │   ├── MentorDashboard.jsx
+│   │   │   ├── AssignedStudents.jsx
+│   │   │   ├── ReviewSubmissions.jsx
+│   │   │   └── ProgressMonitoring.jsx
+│   │   └── student/
+│   │       ├── StudentDashboard.jsx
+│   │       ├── ChoiceForm.jsx
+│   │       ├── InternshipForm.jsx
+│   │       ├── ProjectForm.jsx
+│   │       ├── MonthlySubmission.jsx
+│   │       └── ProgressView.jsx
+│   ├── services/
+│   │   ├── api.js
+│   │   ├── authService.js
+│   │   ├── adminService.js
+│   │   ├── mentorService.js
+│   │   └── studentService.js
+│   ├── utils/
+│   │   ├── constants.js
+│   │   ├── helpers.js
+│   │   └── validation.js
+│   ├── hooks/
+│   │   ├── useAuth.js
+│   │   └── useApi.js
+│   ├── context/
+│   │   └── AuthContext.jsx
+│   ├── App.jsx
+│   ├── main.jsx
+│   └── index.css
+├── .env
+├── .gitignore
+├── package.json
+├── vite.config.js
+└── tailwind.config.js" 

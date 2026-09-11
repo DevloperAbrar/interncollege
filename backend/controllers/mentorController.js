@@ -1581,42 +1581,56 @@ const reviewMPR = async (req, res) => {
   }
 };
 
-// ─── Get all unassigned students (for mentor to pick from) ──────────────────
-// Filters by branchCode parsed from college email
+ 
 const getAvailableStudents = async (req, res) => {
   try {
     const { branchCode = '', search = '' } = req.query;
-
+ 
+    // Base: only unassigned students
     const query = {
       role: 'student',
-      $or: [{ assignedMentor: null }, { assignedMentor: { $exists: false } }]
+      $and: [
+        {
+          $or: [
+            { assignedMentor: null },
+            { assignedMentor: { $exists: false } }
+          ]
+        }
+      ]
     };
-
+ 
+    // Search condition — added into $and so it doesn't clobber the assignedMentor check
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { enrollmentNo: { $regex: search, $options: 'i' } }
-      ];
+      query.$and.push({
+        $or: [
+          { name:         { $regex: search, $options: 'i' } },
+          { email:        { $regex: search, $options: 'i' } },
+          { enrollmentNo: { $regex: search, $options: 'i' } }
+        ]
+      });
     }
-
+ 
     if (branchCode) {
       query.branchCode = branchCode.toLowerCase();
     }
-
-    const students = await User.find(query).select('-password').sort({ enrollmentNo: 1 });
+ 
+    const students = await User.find(query)
+      .select('-password')
+      .sort({ enrollmentNo: 1 });
+ 
     successResponse(res, students, 'Available students retrieved');
   } catch (error) {
+    console.error('getAvailableStudents error:', error);
     errorResponse(res, 'Failed to get available students', 500);
   }
 };
+ 
+
 
 const addStudents = async (req, res) => {
   try {
     const mentorId = req.user._id;
     const { studentIds } = req.body;
-    // New format: studentIds = [{ studentId, semester }]
-    // Back-compat: also accept plain array of id strings
  
     if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
       return errorResponse(res, 'studentIds array is required', 400);
@@ -1632,7 +1646,10 @@ const addStudents = async (req, res) => {
     const ids = entries.map(e => e.studentId);
  
     const mentor = await User.findById(mentorId).populate('branch', 'name');
-    const currentCount = await User.countDocuments({ role: 'student', assignedMentor: mentorId });
+    const currentCount = await User.countDocuments({
+      role: 'student',
+      assignedMentor: mentorId
+    });
  
     if (currentCount + ids.length > mentor.maxStudents) {
       return errorResponse(
@@ -1651,16 +1668,36 @@ const addStudents = async (req, res) => {
       if (semester) updateFields.assignedSemester = semester;
  
       await User.findOneAndUpdate(
-        { _id: studentId, role: 'student' },
+        {
+          _id: studentId,
+          role: 'student',
+          // Safety check: only update if truly unassigned (prevents double-assign race)
+          $or: [
+            { assignedMentor: null },
+            { assignedMentor: { $exists: false } }
+          ]
+        },
         { $set: updateFields }
       );
     }
  
+    // Recount how many were actually updated (some may have been assigned concurrently)
+    const newCount = await User.countDocuments({
+      role: 'student',
+      assignedMentor: mentorId
+    });
+    const actuallyAdded = newCount - currentCount;
+ 
+    // Sync mentor's currentStudentCount to actual DB count (keeps it accurate)
     await User.findByIdAndUpdate(mentorId, {
-      $inc: { currentStudentCount: ids.length }
+      $set: { currentStudentCount: newCount }
     });
  
-    successResponse(res, { added: ids.length }, `${ids.length} students added successfully`);
+    successResponse(
+      res,
+      { added: actuallyAdded },
+      `${actuallyAdded} students added successfully`
+    );
   } catch (error) {
     console.error('addStudents error:', error);
     errorResponse(res, 'Failed to add students', 500);

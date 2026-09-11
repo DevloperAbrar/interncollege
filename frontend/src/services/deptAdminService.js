@@ -11,4 +11,13 @@ export const deptAdminService = {
   getMentorStudents: async (id) => (await api.get(`/dept-admin/mentors/${id}/students`)).data,
   createMentor: async (data) => (await api.post('/dept-admin/mentors', data)).data,
   deleteMentor: async (id) => (await api.delete(`/dept-admin/mentors/${id}`)).data,
+
+  getAllStudents: async (filters = {}) =>
+    (await api.get('/dept-admin/students', { params: filters })).data,
+
+  assignStudents: async (mentorId, studentIds, semester) =>
+    (await api.post('/dept-admin/assign-students', { mentorId, studentIds, semester })).data,
+
+  unassignStudent: async (studentId) =>
+    (await api.put(`/dept-admin/students/${studentId}/unassign`)).data,
 }

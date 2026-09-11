@@ -5,7 +5,8 @@ const { deptAdminOnly } = require('../middleware/roleCheck');
 const {
   getDashboard,
   getBranches, createBranch, updateBranch, deleteBranch,
-  getMentors, createMentor, updateMentor, deleteMentor, getMentorStudents
+  getMentors, createMentor, updateMentor, deleteMentor, getMentorStudents,
+  getAllStudentsForAssignment, assignStudentsToMentor, unassignStudent   // NEW
 } = require('../controllers/deptAdminController');
 
 router.use(auth);
@@ -21,5 +22,8 @@ router.get('/mentors/:id/students', getMentorStudents);
 router.post('/mentors', createMentor);
 router.delete('/mentors/:id', deleteMentor);
 router.put('/mentors/:id', updateMentor);
+router.get('/students', getAllStudentsForAssignment);
+router.post('/assign-students', assignStudentsToMentor);
+router.put('/students/:id/unassign', unassignStudent);
 
 module.exports = router;

@@ -9,7 +9,9 @@ import LogsPage from './pages/LogsPage'
 // ─── Dept Admin ───────────────────────────────────────────────────────────
 import DeptAdminDashboard from './components/deptAdmin/DeptAdminDashboard'
 import BranchManagement from './components/deptAdmin/BranchManagement'
+
 import DeptMentorManagement from './components/deptAdmin/MentorManagement'
+import AssignStudents from './components/deptAdmin/AssignStudents'   // NEW
 
 // ─── Admin ────────────────────────────────────────────────────────────────
 import DepartmentManagement from './components/admin/DepartmentManagement'
@@ -205,7 +207,16 @@ function App() {
             <AppLayout><DeptMentorManagement /></AppLayout>
           </ProtectedRoute>
         } />
-        <Route path="/dept-admin" element={<Navigate to="/dept-admin/dashboard" replace />} />
+        <Route path="/dept-admin/mentors" element={
+          <ProtectedRoute allowedRoles={['dept_admin']}>
+            <AppLayout><DeptMentorManagement /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/dept-admin/assign-students" element={
+          <ProtectedRoute allowedRoles={['dept_admin']}>
+            <AppLayout><AssignStudents /></AppLayout>
+          </ProtectedRoute>
+        } />
 
         {/* ── Mentor ───────────────────────────────────────────────── */}
         <Route path="/mentor/dashboard" element={

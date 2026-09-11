@@ -259,4 +259,100 @@ const getDashboard = async (req, res) => {
   }
 };
 
-module.exports = { getBranches, createBranch, deleteBranch, getMentors, getMentorStudents, createMentor, updateMentor, deleteMentor, getDashboard, updateBranch };
+// GET /api/dept-admin/students — all students (assigned + unassigned), with current mentor shown
+const getAllStudentsForAssignment = async (req, res) => {
+  try {
+    const { search = '', branchCode = '' } = req.query;
+    let query = { role: 'student' };
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { enrollmentNo: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (branchCode) query.branchCode = branchCode.toLowerCase();
+
+    const students = await User.find(query)
+      .select('-password')
+      .populate('assignedMentor', 'name email')
+      .sort({ enrollmentNo: 1 });
+
+    successResponse(res, students, 'Students retrieved');
+  } catch (error) {
+    console.error('getAllStudentsForAssignment error:', error);
+    errorResponse(res, 'Failed to get students', 500);
+  }
+};
+
+// POST /api/dept-admin/assign-students  { mentorId, studentIds: [{studentId, semester}], semester }
+const assignStudentsToMentor = async (req, res) => {
+  try {
+    const { mentorId, studentIds, semester } = req.body;
+    if (!mentorId || !studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return errorResponse(res, 'mentorId and studentIds are required', 400);
+    }
+    if (!semester) return errorResponse(res, 'Semester is required', 400);
+
+    const mentor = await User.findOne({ _id: mentorId, role: 'mentor', department: req.user.department });
+    if (!mentor) return errorResponse(res, 'Mentor not found in your department', 404);
+
+    // Capacity check: only counts students newly coming IN (not already this mentor's)
+    const students = await User.find({ _id: { $in: studentIds }, role: 'student' });
+    const incoming = students.filter(s => String(s.assignedMentor) !== String(mentorId)).length;
+    const currentCount = await User.countDocuments({ role: 'student', assignedMentor: mentorId });
+
+    if (currentCount + incoming > mentor.maxStudents) {
+      return errorResponse(res, `Capacity exceeded. Only ${mentor.maxStudents - currentCount} slot(s) left`, 400);
+    }
+
+    // Track old mentors to update their counts afterwards
+    const oldMentorIds = [...new Set(
+      students.filter(s => s.assignedMentor).map(s => String(s.assignedMentor))
+    )];
+
+    await User.updateMany(
+      { _id: { $in: studentIds }, role: 'student' },
+      { $set: { assignedMentor: mentorId, assignedSemester: semester, branch: mentor.branch || null } }
+    );
+
+    // Recount and sync every affected mentor's currentStudentCount
+    const affectedMentorIds = [...new Set([mentorId, ...oldMentorIds])];
+    for (const mId of affectedMentorIds) {
+      const count = await User.countDocuments({ role: 'student', assignedMentor: mId });
+      await User.findByIdAndUpdate(mId, { $set: { currentStudentCount: count } });
+    }
+
+    successResponse(res, { assigned: studentIds.length }, 'Students assigned successfully');
+  } catch (error) {
+    console.error('assignStudentsToMentor error:', error);
+    errorResponse(res, 'Failed to assign students', 500);
+  }
+};
+
+// PUT /api/dept-admin/students/:id/unassign — remove student from their mentor
+const unassignStudent = async (req, res) => {
+  try {
+    const student = await User.findOne({ _id: req.params.id, role: 'student' });
+    if (!student) return errorResponse(res, 'Student not found', 404);
+
+    const oldMentorId = student.assignedMentor;
+
+    student.assignedMentor = null;
+    student.assignedSemester = null;
+    await student.save();
+
+    if (oldMentorId) {
+      const count = await User.countDocuments({ role: 'student', assignedMentor: oldMentorId });
+      await User.findByIdAndUpdate(oldMentorId, { $set: { currentStudentCount: count } });
+    }
+
+    successResponse(res, null, 'Student removed from mentor');
+  } catch (error) {
+    console.error('unassignStudent error:', error);
+    errorResponse(res, 'Failed to unassign student', 500);
+  }
+};
+module.exports = { getBranches, createBranch, deleteBranch, getMentors, getMentorStudents, createMentor, updateMentor, deleteMentor, getDashboard, updateBranch,
+  getAllStudentsForAssignment, assignStudentsToMentor, unassignStudent };

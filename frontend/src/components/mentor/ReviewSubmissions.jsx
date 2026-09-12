@@ -481,6 +481,7 @@ const ReviewSubmissions = () => {
   const [editMode, setEditMode] = useState(false)
   const [editedData, setEditedData] = useState({})
   const [editedFiles, setEditedFiles] = useState({})
+  const [savingEdits, setSavingEdits] = useState(false)
 
   // Marks state
   const [marks, setMarks] = useState({})
@@ -567,12 +568,12 @@ const ReviewSubmissions = () => {
   }
 
   const handleSaveEdits = async () => {
-    if (!selectedSubmission) return
+    if (!selectedSubmission || savingEdits) return   // ✅ ignore extra clicks while a save is in flight
 
+    setSavingEdits(true)
     try {
       const formData = new FormData()
 
-      // Determine update type
       let updateType = 'registration'
       if (selectedSubmission.reviewType === 'mpr') {
         updateType = 'mpr'
@@ -582,12 +583,10 @@ const ReviewSubmissions = () => {
 
       formData.append('updateType', updateType)
 
-      // Add edited text data
       Object.entries(editedData).forEach(([key, value]) => {
         formData.append(key, value)
       })
 
-      // Add edited files
       Object.entries(editedFiles).forEach(([key, file]) => {
         if (file) {
           formData.append(key, file)
@@ -603,12 +602,13 @@ const ReviewSubmissions = () => {
         setEditMode(false)
         setEditedData({})
         setEditedFiles({})
-        // Reload details
-        handleViewDetails(selectedSubmission._id)
+        await handleViewDetails(selectedSubmission._id)   // await so spinner stays until reload finishes
       }
     } catch (error) {
       console.error('Error saving edits:', error)
       alert('Failed to save edits: ' + error.message)
+    } finally {
+      setSavingEdits(false)   // ✅ always release the lock, success or failure
     }
   }
 
@@ -951,7 +951,10 @@ const ReviewSubmissions = () => {
                   {selectedSubmission?.currentReviewStatus === 'pending' && (
                     <button
                       onClick={() => setEditMode(!editMode)}
-                      className={`px-4 py-2 rounded-md flex items-center ${editMode
+                      disabled={savingEdits}
+                      className={`px-4 py-2 rounded-md flex items-center ${savingEdits
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : editMode
                         ? 'bg-gray-200 text-gray-700'
                         : 'bg-blue-500 text-white hover:bg-blue-600'
                         }`}
@@ -1047,10 +1050,23 @@ const ReviewSubmissions = () => {
                         {editMode && (
                           <button
                             onClick={handleSaveEdits}
-                            className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 flex items-center"
+                            disabled={savingEdits}
+                            className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
+                                ? 'bg-green-300 text-white cursor-not-allowed'
+                                : 'bg-green-500 text-white hover:bg-green-600'
+                              }`}
                           >
-                            <Save className="h-4 w-4 mr-1" />
-                            Save Changes
+                            {savingEdits ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-1" />
+                                Save Changes
+                              </>
+                            )}
                           </button>
                         )}
                       </div>
@@ -1333,10 +1349,23 @@ const ReviewSubmissions = () => {
                         {editMode && (
                           <button
                             onClick={handleSaveEdits}
-                            className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 flex items-center"
+                            disabled={savingEdits}
+                            className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
+                                ? 'bg-green-300 text-white cursor-not-allowed'
+                                : 'bg-green-500 text-white hover:bg-green-600'
+                              }`}
                           >
-                            <Save className="h-4 w-4 mr-1" />
-                            Save Changes
+                            {savingEdits ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-1" />
+                                Save Changes
+                              </>
+                            )}
                           </button>
                         )}
                       </div>
@@ -1437,10 +1466,23 @@ const ReviewSubmissions = () => {
                         {editMode && (
                           <button
                             onClick={handleSaveEdits}
-                            className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 flex items-center"
+                            disabled={savingEdits}
+                            className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
+                                ? 'bg-green-300 text-white cursor-not-allowed'
+                                : 'bg-green-500 text-white hover:bg-green-600'
+                              }`}
                           >
-                            <Save className="h-4 w-4 mr-1" />
-                            Save Changes
+                            {savingEdits ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-1" />
+                                Save Changes
+                              </>
+                            )}
                           </button>
                         )}
                       </div>
@@ -1889,9 +1931,13 @@ const ReviewSubmissions = () => {
                   Last updated: {selectedSubmission ? formatDateTime(selectedSubmission.updatedAt) : 'N/A'}
                 </div>
                 <div className="flex space-x-3">
-                  <button
+                <button
                     onClick={resetModal}
-                    className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    disabled={savingEdits}
+                    className={`px-6 py-2 text-sm font-medium border border-gray-300 rounded-lg transition-colors ${savingEdits
+                      ? 'text-gray-400 bg-gray-50 cursor-not-allowed'
+                      : 'text-gray-700 bg-white hover:bg-gray-50'
+                      }`}
                   >
                     Close
                   </button>

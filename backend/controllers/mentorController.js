@@ -72,6 +72,23 @@ const getDriveFolderStatus = async (req, res) => {
 };
 
 
+// mentorController.js
+
+// Helper: pull the Drive fileId out of a stored webViewLink/URL
+const extractDriveFileId = (url) => {
+  if (!url) return null;
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+    /\/d\/([a-zA-Z0-9_-]+)/
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+};
+
 const updateSubmissionDetails = async (req, res) => {
   try {
     console.log('📝 Starting submission update process...');
@@ -99,8 +116,24 @@ const updateSubmissionDetails = async (req, res) => {
 
     const student = await User.findById(submission.student);
 
+    // ─── Snapshot the CURRENT doc links (per field) before we touch anything ───
+    // We need these so we can delete the old Drive file once the new one is up.
+    let oldLinksByField = {};
+    if (req.files && Object.keys(req.files).length > 0) {
+      if (updateType === 'registration') {
+        oldLinksByField = { ...submission.registrationData?.toObject?.() ?? submission.registrationData };
+      } else if (updateType === 'finalReport') {
+        oldLinksByField = { ...submission.finalReport?.toObject?.() ?? submission.finalReport };
+      } else if (updateType === 'mpr' && mprType && submission.mprSubmissions?.[mprType]) {
+        oldLinksByField = { document: submission.mprSubmissions[mprType].document };
+      }
+    }
+
     // Handle file uploads
     let uploadedFiles = {};
+    let uploadFailed = false;
+    let uploadErrorMessage = null;
+
     if (req.files && Object.keys(req.files).length > 0) {
       try {
         const mentorFolderId = await resolveOwnDriveFolder(mentorId);
@@ -122,10 +155,30 @@ const updateSubmissionDetails = async (req, res) => {
             uploadedFiles[file.fieldName] = file.webViewLink;
           });
         }
+
+        // If SOME fields failed (partial), surface that too
+        if (uploadResults.errors && uploadResults.errors.length > 0) {
+          uploadFailed = true;
+          uploadErrorMessage = uploadResults.errors
+            .map(e => `${e.fieldName}: ${e.error}`)
+            .join(', ');
+        }
       } catch (uploadError) {
-        console.error('File upload error:', uploadError);
+        console.error('❌ File upload error:', uploadError);
+        uploadFailed = true;
+        uploadErrorMessage = uploadError.message;
+      }
+
+      // ✅ Don't pretend it worked. If nothing uploaded at all, stop here.
+      if (Object.keys(uploadedFiles).length === 0) {
+        return errorResponse(
+          res,
+          `Failed to upload replacement document(s) to Google Drive: ${uploadErrorMessage || 'unknown error'}. No changes were saved.`,
+          502
+        );
       }
     }
+
     // Update based on type
     if (updateType === 'registration') {
       const updatedData = { ...req.body };
@@ -162,6 +215,24 @@ const updateSubmissionDetails = async (req, res) => {
     }
 
     await submission.save();
+
+    // ─── Now that the new links are safely persisted, delete the OLD Drive files ───
+    if (Object.keys(uploadedFiles).length > 0) {
+      const deletions = Object.keys(uploadedFiles).map(async (fieldName) => {
+        const oldUrl = oldLinksByField[fieldName];
+        if (!oldUrl) return;
+        const oldFileId = extractDriveFileId(oldUrl);
+        if (!oldFileId) return;
+        try {
+          await googleDriveService.deleteFile(oldFileId);
+          console.log(`🗑️ Deleted old Drive file for "${fieldName}" (${oldFileId})`);
+        } catch (delErr) {
+          // Don't fail the request over cleanup — just log it
+          console.warn(`⚠️ Could not delete old Drive file for "${fieldName}":`, delErr.message);
+        }
+      });
+      await Promise.all(deletions);
+    }
 
     // Send notification
     try {

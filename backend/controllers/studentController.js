@@ -241,9 +241,10 @@ const submitRegistration = async (req, res) => {
       if (fileUrls.offerLetter) cleanedData.offerLetter = fileUrls.offerLetter;
       if (fileUrls.noc || fileUrls.nocLetter) cleanedData.nocLetter = fileUrls.noc || fileUrls.nocLetter;
 
-      cleanedData.hasStipend =
+      cleanedData.hasStipend = Boolean(
         bodyData.hasStipend === 'true' || bodyData.hasStipend === true ||
-        (bodyData.stipendAmount && Number(bodyData.stipendAmount) > 0);
+        (bodyData.stipendAmount && Number(bodyData.stipendAmount) > 0)
+      );
 
       if (cleanedData.hasStipend) {
         const amount = bodyData.stipendAmount || bodyData.stipendPerMonth;

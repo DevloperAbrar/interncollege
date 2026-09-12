@@ -1,4 +1,4 @@
-import api from './api'
+import api, { apiFormData } from './api'
 
 export const mentorService = {
 
@@ -46,7 +46,11 @@ export const mentorService = {
     const response = await api.get(`/mentor/submissions/${id}`)  // FIXED: proper template literal
     return response.data
   },
-
+  updateSubmission: async (id, formData) => {
+    const response = await apiFormData.put(`/mentor/submissions/${id}`, formData)
+    return response.data
+  },
+  
   reviewSubmission: async (id, action, feedback = '', marks = null) => {
     const response = await api.put(`/mentor/submissions/${id}/review`, {
       action,

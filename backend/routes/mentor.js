@@ -5,7 +5,7 @@ const { mentorOnly } = require('../middleware/roleCheck');
 const { body } = require('express-validator');
 const { checkValidationResult } = require('../utils/validateInput');
 const { addStudents, getAvailableStudents, setDriveFolder, getDriveFolderStatus } = require('../controllers/mentorController');
-
+const { upload, handleUploadError } = require('../middleware/upload');
 
 const {
   getDashboard,
@@ -17,7 +17,8 @@ const {
   exportAssignedStudents,
   getSubmissionHistory,
   sendMonthlyReminder,
-  reviewMPR  // NEW: Add this import
+  reviewMPR,
+  updateSubmissionDetails   // ADD THIS
 } = require('../controllers/mentorController');
 
 // Apply auth and mentor role check to all routes
@@ -91,5 +92,28 @@ router.post('/send-monthly-reminder', [
 
 // Export functionality
 router.get('/export/students', exportAssignedStudents);
+
+// Update submission (mentor editing student's submission during review)
+router.put('/submissions/:id',
+  upload.fields([
+    { name: 'stipendProof', maxCount: 1 },
+    { name: 'offerLetter', maxCount: 1 },
+    { name: 'nocLetter', maxCount: 1 },
+    { name: 'projectReport', maxCount: 1 },
+    { name: 'document', maxCount: 1 },
+    { name: 'finalPPT', maxCount: 1 },
+    { name: 'finalReport', maxCount: 1 },
+    { name: 'certificate', maxCount: 1 },
+    { name: 'finalMPR', maxCount: 1 },
+    { name: 'ppoOfferLetter', maxCount: 1 },
+    { name: 'ppoOfferLetterProject', maxCount: 1 },
+    { name: 'conferencePaymentProof', maxCount: 1 },
+    { name: 'conferenceCertificate', maxCount: 1 },
+    { name: 'finalProjectReport', maxCount: 1 },
+    { name: 'publishedPaperCopy', maxCount: 1 }
+  ]),
+  handleUploadError,
+  updateSubmissionDetails
+);
 
 module.exports = router;

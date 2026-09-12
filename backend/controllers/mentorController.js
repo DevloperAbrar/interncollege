@@ -1585,39 +1585,44 @@ const reviewMPR = async (req, res) => {
 const getAvailableStudents = async (req, res) => {
   try {
     const { branchCode = '', search = '' } = req.query;
- 
-    // Base: only unassigned students
-    const query = {
-      role: 'student',
-      $and: [
-        {
-          $or: [
-            { assignedMentor: null },
-            { assignedMentor: { $exists: false } }
-          ]
-        }
-      ]
-    };
- 
-    // Search condition — added into $and so it doesn't clobber the assignedMentor check
+
+    const query = { role: 'student' };
+    const andConditions = [];
+
     if (search) {
-      query.$and.push({
+      // When actively searching by name/email/enrollment, show matches
+      // REGARDLESS of assignment status — so a mentor/dept-admin can see
+      // "this student is already assigned to X" instead of it just
+      // disappearing or (worse) letting them add it again.
+      andConditions.push({
         $or: [
           { name:         { $regex: search, $options: 'i' } },
           { email:        { $regex: search, $options: 'i' } },
           { enrollmentNo: { $regex: search, $options: 'i' } }
         ]
       });
+    } else {
+      // Default browsing view (no search term typed): only show
+      // students who don't have a mentor yet.
+      andConditions.push({
+        $or: [
+          { assignedMentor: null },
+          { assignedMentor: { $exists: false } }
+        ]
+      });
     }
- 
+
     if (branchCode) {
-      query.branchCode = branchCode.toLowerCase();
+      andConditions.push({ branchCode: branchCode.toLowerCase() });
     }
- 
+
+    if (andConditions.length) query.$and = andConditions;
+
     const students = await User.find(query)
       .select('-password')
+      .populate('assignedMentor', 'name email') // so the frontend can show "Already assigned to <name>"
       .sort({ enrollmentNo: 1 });
- 
+
     successResponse(res, students, 'Available students retrieved');
   } catch (error) {
     console.error('getAvailableStudents error:', error);
@@ -1729,7 +1734,3 @@ module.exports = {
   setDriveFolder,
   getDriveFolderStatus
 };
-
-
-
-

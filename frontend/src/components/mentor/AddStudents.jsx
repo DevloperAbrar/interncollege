@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { mentorService } from '../../services/mentorService'
-import { Search, UserPlus, Check, Filter, ChevronDown } from 'lucide-react'
+import { Search, UserPlus, Check, Filter, ChevronDown, UserCheck } from 'lucide-react'
 
 const SEMESTER_OPTIONS = [
   { value: 'any_internship',   label: 'Any Internship' },
@@ -73,10 +73,14 @@ const AddStudents = () => {
   }
 
   const selectAll = () => {
-    setSelected(students.map(s => ({
-      studentId: s._id,
-      semester: semesterMap[s._id] || ''
-    })))
+    setSelected(
+      students
+        .filter(s => !s.assignedMentor)
+        .map(s => ({
+          studentId: s._id,
+          semester: semesterMap[s._id] || ''
+        }))
+    )
   }
 
   return (

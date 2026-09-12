@@ -1590,10 +1590,6 @@ const getAvailableStudents = async (req, res) => {
     const andConditions = [];
 
     if (search) {
-      // When actively searching by name/email/enrollment, show matches
-      // REGARDLESS of assignment status — so a mentor/dept-admin can see
-      // "this student is already assigned to X" instead of it just
-      // disappearing or (worse) letting them add it again.
       andConditions.push({
         $or: [
           { name:         { $regex: search, $options: 'i' } },
@@ -1602,8 +1598,6 @@ const getAvailableStudents = async (req, res) => {
         ]
       });
     } else {
-      // Default browsing view (no search term typed): only show
-      // students who don't have a mentor yet.
       andConditions.push({
         $or: [
           { assignedMentor: null },
@@ -1620,7 +1614,7 @@ const getAvailableStudents = async (req, res) => {
 
     const students = await User.find(query)
       .select('-password')
-      .populate('assignedMentor', 'name email') // so the frontend can show "Already assigned to <name>"
+      .populate('assignedMentor', 'name email')
       .sort({ enrollmentNo: 1 });
 
     successResponse(res, students, 'Available students retrieved');
@@ -1629,7 +1623,6 @@ const getAvailableStudents = async (req, res) => {
     errorResponse(res, 'Failed to get available students', 500);
   }
 };
- 
 
 
 const addStudents = async (req, res) => {

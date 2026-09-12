@@ -181,35 +181,36 @@ const AddStudents = () => {
           </div>
 
           <div className="divide-y divide-gray-100">
-            {students.map(s => (
+          {students.map(s => {
+              const alreadyAssigned = !!s.assignedMentor
+              return (
               <div
                 key={s._id}
                 className={`grid grid-cols-12 gap-2 items-center px-6 py-4 transition-colors ${
-                  isSelected(s._id) ? 'bg-blue-50' : 'hover:bg-gray-50'
+                  alreadyAssigned ? 'bg-gray-50 opacity-75' : isSelected(s._id) ? 'bg-blue-50' : 'hover:bg-gray-50'
                 }`}
               >
-                {/* Checkbox */}
                 <div
-                  className="col-span-1 cursor-pointer"
-                  onClick={() => toggle(s._id)}
+                  className={alreadyAssigned ? 'col-span-1' : 'col-span-1 cursor-pointer'}
+                  onClick={() => !alreadyAssigned && toggle(s._id)}
                 >
                   <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                    isSelected(s._id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                    alreadyAssigned
+                      ? 'border-gray-200 bg-gray-100'
+                      : isSelected(s._id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
                   }`}>
-                    {isSelected(s._id) && <Check className="h-3 w-3 text-white" />}
+                    {isSelected(s._id) && !alreadyAssigned && <Check className="h-3 w-3 text-white" />}
                   </div>
                 </div>
 
-                {/* Student info */}
                 <div
-                  className="col-span-4 cursor-pointer min-w-0"
-                  onClick={() => toggle(s._id)}
+                  className={alreadyAssigned ? 'col-span-4 min-w-0' : 'col-span-4 cursor-pointer min-w-0'}
+                  onClick={() => !alreadyAssigned && toggle(s._id)}
                 >
                   <p className="font-medium text-gray-900 truncate">{s.name || s.email.split('@')[0]}</p>
                   <p className="text-sm text-gray-500 truncate">{s.email}</p>
                 </div>
 
-                {/* Enrollment / branch */}
                 <div className="col-span-3">
                   <p className="text-sm font-medium text-gray-700">{s.enrollmentNo || '—'}</p>
                   {s.branchCode && (
@@ -217,37 +218,47 @@ const AddStudents = () => {
                   )}
                 </div>
 
-                {/* Semester dropdown */}
                 <div className="col-span-4">
-                  <div className="relative">
-                    <select
-                      value={semesterMap[s._id] || ''}
-                      onChange={e => {
-                        setSemester(s._id, e.target.value)
-                        // Auto-select the student when semester is picked
-                        if (!isSelected(s._id) && e.target.value) {
-                          setSelected(prev => [...prev, { studentId: s._id, semester: e.target.value }])
-                        }
-                      }}
-                      className={`w-full appearance-none border rounded-lg px-3 py-2 text-sm pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isSelected(s._id) && !semesterMap[s._id]
-                          ? 'border-orange-400 bg-orange-50'
-                          : 'border-gray-300 bg-white'
-                      }`}
-                    >
-                      <option value="">— Select Semester —</option>
-                      {SEMESTER_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
-                  </div>
-                  {isSelected(s._id) && !semesterMap[s._id] && (
-                    <p className="text-xs text-orange-600 mt-1">Semester required</p>
+                  {alreadyAssigned ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">
+                      <UserCheck className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      <span className="truncate">
+                        Already assigned to <strong>{s.assignedMentor.name || s.assignedMentor.email}</strong>
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <select
+                          value={semesterMap[s._id] || ''}
+                          onChange={e => {
+                            setSemester(s._id, e.target.value)
+                            if (!isSelected(s._id) && e.target.value) {
+                              setSelected(prev => [...prev, { studentId: s._id, semester: e.target.value }])
+                            }
+                          }}
+                          className={`w-full appearance-none border rounded-lg px-3 py-2 text-sm pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            isSelected(s._id) && !semesterMap[s._id]
+                              ? 'border-orange-400 bg-orange-50'
+                              : 'border-gray-300 bg-white'
+                          }`}
+                        >
+                          <option value="">— Select Semester —</option>
+                          {SEMESTER_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+                      </div>
+                      {isSelected(s._id) && !semesterMap[s._id] && (
+                        <p className="text-xs text-orange-600 mt-1">Semester required</p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

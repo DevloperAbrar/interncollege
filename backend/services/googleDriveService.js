@@ -342,7 +342,8 @@ async createStudentFolder(studentId, studentName, parentFolderId = null) {
     }
   }
 // Updated uploadStudentDocuments method in googleDriveService.js
-async uploadStudentDocuments(studentData, files, parentFolderId = null) {
+
+async uploadStudentDocuments(studentData, files, parentFolderId = null, cachedStudentFolderId = null, onFolderCreated = null) {
   try {
     console.log('📁 Starting student documents upload process...');
     if (!this.drive) this.initialize();
@@ -355,22 +356,34 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null) {
     const targetParent = parentFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID;
 
     let studentFolder;
-    const sanitizedName = studentData.fullName.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_');
-    const folderName = `${studentData.studentId}_${sanitizedName}`;
 
-    try {
-      studentFolder = await this.findFolderByName(folderName, targetParent);
-      if (!studentFolder) {
-        studentFolder = await this.createStudentFolder(studentData.studentId, studentData.fullName, targetParent);
-        console.log('📁 Created new folder:', folderName);
-      } else {
-        console.log('📁 Using existing folder:', folderName);
+    // ✅ Fast path: use the cached folder ID directly, no Drive lookup at all
+    if (cachedStudentFolderId) {
+      studentFolder = { id: cachedStudentFolderId };
+      console.log('📁 Using cached student folder ID:', cachedStudentFolderId);
+    } else {
+      const sanitizedName = studentData.fullName.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_');
+      const folderName = `${studentData.studentId}_${sanitizedName}`;
+
+      try {
+        studentFolder = await this.findFolderByName(folderName, targetParent);
+        if (!studentFolder) {
+          studentFolder = await this.createStudentFolder(studentData.studentId, studentData.fullName, targetParent);
+          console.log('📁 Created new folder:', folderName);
+        } else {
+          console.log('📁 Using existing folder:', folderName);
+        }
+
+        // ✅ Let the caller persist this ID so next time we hit the fast path above
+        if (onFolderCreated) {
+          await onFolderCreated(studentFolder.id);
+        }
+      } catch (folderError) {
+        console.error('❌ Folder creation/retrieval failed:', folderError);
+        throw new Error(`Failed to create/access student folder: ${folderError.message}`);
       }
-    } catch (folderError) {
-      console.error('❌ Folder creation/retrieval failed:', folderError);
-      throw new Error(`Failed to create/access student folder: ${folderError.message}`);
     }
-    
+
     const uploadResults = {
       folderId: studentFolder.id,
       folderLink: studentFolder.webViewLink,
@@ -381,7 +394,7 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null) {
     // Define expected file field mappings
     const fieldMappings = {
       'offerLetter': 'Offer_Letter',
-      'noc': 'NOC_Document', 
+      'noc': 'NOC_Document',
       'nocLetter': 'NOC_Document',
       'stipendProof': 'Stipend_Proof',
       'projectReport': 'Project_Report',
@@ -393,32 +406,32 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null) {
     // Upload each file to the student's folder
     for (const [fieldName, fileArray] of Object.entries(files)) {
       const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
-      
+
       console.log(`🔍 Processing field: ${fieldName}`, {
         hasFile: !!file,
         filePath: file?.path,
         originalName: file?.originalname,
         fileExists: file?.path ? fs.existsSync(file.path) : false
       });
-      
+
       if (file && file.path && fs.existsSync(file.path)) {
         try {
           console.log(`📤 Uploading ${fieldName}: ${file.originalname}`);
-          
+
           // Create a meaningful filename with timestamp
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
           const fileExtension = path.extname(file.originalname);
           const baseFileName = fieldMappings[fieldName] || fieldName.replace(/([A-Z])/g, '_$1').toLowerCase();
           const fileName = `${studentData.studentId}_${baseFileName}_${timestamp}${fileExtension}`;
-          
+
           console.log(`📝 Generated filename: ${fileName}`);
-          
+
           const uploadResult = await this.uploadFile(
             file.path,
             fileName,
             studentFolder.id
           );
-          
+
           // Store the result with proper URLs
           const fileResult = {
             fieldName,
@@ -432,7 +445,7 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null) {
             embedUrl: `https://drive.google.com/file/d/${uploadResult.fileId}/preview`,
             size: uploadResult.size
           };
-          
+
           uploadResults.uploadedFiles.push(fileResult);
 
           console.log(`✅ Successfully uploaded: ${fileName} (File ID: ${uploadResult.fileId})`);
@@ -469,7 +482,7 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null) {
     }
 
     console.log(`✅ Upload process completed. ${uploadResults.uploadedFiles.length} files uploaded, ${uploadResults.errors.length} errors`);
-    
+
     // If some files uploaded successfully, return the results
     if (uploadResults.uploadedFiles.length > 0) {
       console.log('📊 Upload summary:', {
@@ -478,12 +491,12 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null) {
       });
       return uploadResults;
     }
-    
+
     // If all uploads failed, throw an error
     if (uploadResults.errors.length > 0) {
       throw new Error(`All file uploads failed: ${uploadResults.errors.map(e => `${e.fieldName}: ${e.error}`).join(', ')}`);
     }
-    
+
     throw new Error('No files were processed');
 
   } catch (error) {

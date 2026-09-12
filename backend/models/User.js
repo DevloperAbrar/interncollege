@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema({
   currentStudentCount: { type: Number, default: 0 },
   branchCode: { type: String, default: '' }, // parsed from email e.g. "io" from 23io10...@mitsgwl.ac.in
 
-  // Add inside the mentor-specific section, alongside branch/maxStudents:
+  // Mentor's externally-connected Drive folder (pasted link, for viewing/organizing)
   driveFolderId: { type: String, default: null },
   driveFolderStatus: {
     type: String,
@@ -41,10 +41,18 @@ const userSchema = new mongoose.Schema({
   },
   driveFolderLink: { type: String, default: '' }, // raw link mentor pasted, for display
 
+  // Mentor's auto-created internal upload folder (inside GOOGLE_DRIVE_FOLDER_ID)
+  // Cached here so we don't call findFolderByName/createFolder on every save.
+  internalUploadFolderId: { type: String, default: null },
+
   // ─── student specific ───────────────────────────────────────────────────
   enrollmentNo: { type: String, unique: true, sparse: true },
   assignedMentor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   semester: { type: Number, min: 1, max: 12, default: null },
+
+  // Student's own subfolder inside the mentor's internal upload folder.
+  // Cached so uploadStudentDocuments doesn't re-search for it every edit.
+  driveStudentFolderId: { type: String, default: null },
 
 }, { timestamps: true });
 

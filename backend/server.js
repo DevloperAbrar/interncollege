@@ -46,12 +46,34 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
+// ══════════════════════════════════════════════════════════════
+// ✅ ADD THIS — force Google Drive to initialize and log at boot,
+// instead of waiting silently for the first real upload attempt.
+// ══════════════════════════════════════════════════════════════
+const googleDriveService = require('./services/googleDriveService');
+
+console.log('🚀 Testing Google Drive connection at startup...');
+googleDriveService.testConnection()
+  .then((result) => {
+    console.log('✅✅✅ Google Drive READY:', result.user.emailAddress);
+  })
+  .catch((err) => {
+    console.error('💥💥💥 GOOGLE DRIVE FAILED AT BOOT 💥💥💥');
+    console.error('Error message:', err.message);
+    console.error('This is why uploads are failing. Fix this before anything else.');
+  });
+// ══════════════════════════════════════════════════════════════
+// END of added block
+// ══════════════════════════════════════════════════════════════
+
 // ─── Security ────────────────────────────────────────────────────────────────
 // Relax helmet's CSP so that PDF embeds work in the browser
 app.use(helmet({
   contentSecurityPolicy: false, // allow PDF inline preview
   crossOriginResourcePolicy: { policy: 'cross-origin' } // allow files to be loaded cross-origin
 }));
+
+// ...everything else below is UNCHANGED, don't touch it
 
 // Rate limiting
 const limiter = rateLimit({

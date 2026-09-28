@@ -7,10 +7,12 @@ const fs = require('fs');
 // ─── Safe email helper ────────────────────────────────────────────────────────
 let emailSvc;
 try { emailSvc = require('../services/emailService'); } catch { emailSvc = null; }
-const sendEmail = async (to, mentorName, studentName, type) => {
-  try {
-    if (emailSvc && to) await emailSvc.sendSubmissionPending(to, mentorName, studentName, type);
-  } catch (e) { console.error('Email error (non-critical):', e.message); }
+// Fire-and-forget: never make the student wait for (or fail because of) email
+const sendEmail = (to, mentorName, studentName, type) => {
+  if (!emailSvc || !to) return;
+  emailSvc
+    .sendSubmissionPending(to, mentorName, studentName, type)
+    .catch((e) => console.error('Email error (non-critical):', e.message));
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

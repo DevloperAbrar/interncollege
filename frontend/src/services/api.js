@@ -68,7 +68,7 @@ api.interceptors.response.use(
 // ─── Multipart instance (file uploads) ───────────────────────────────────────
 const apiFormData = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000,
+  timeout: 120000,
   headers: {
     'Content-Type': 'multipart/form-data'
   }

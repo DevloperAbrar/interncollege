@@ -10,17 +10,20 @@ class EmailService {
     try {
       return nodemailer.createTransport({
         host: process.env.EMAIL_HOST,
-        port: process.env.EMAIL_PORT || 587,
+        port: Number(process.env.EMAIL_PORT) || 587,
         secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
         },
-        // Additional options for better reliability
-        pool: true, // use pooled connection
-        maxConnections: 5, // limit connections
-        maxMessages: 100, // limit messages per connection
-        rateLimit: 10 // limit to 10 messages per second
+        // Fail fast instead of hanging for minutes (Render free tier blocks SMTP)
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+        rateLimit: 10
       });
     } catch (error) {
       console.error('❌ Failed to create email transporter:', error);

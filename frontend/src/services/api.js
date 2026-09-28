@@ -1,11 +1,44 @@
-// Enhanced api.js with better debugging
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? 'http://localhost:5000/api' : '')
 
-console.log('API Base URL:', API_BASE_URL) // Debug log
+if (!API_BASE_URL) {
+  console.error(
+    'VITE_API_URL is not set. Add it in Render (Static Site → Environment) and redeploy.'
+  )
+}
 
-// Create axios instance
+const AUTH_PAGES = ['/login', '/admin-login']
+
+// Clears the session and redirects on 401, but NOT when the 401 came from a
+// login attempt itself (wrong password must show an error, not redirect).
+const handleUnauthorized = (error) => {
+  const status = error.response?.status
+  const requestUrl = error.config?.url || ''
+  const isLoginAttempt =
+    requestUrl.includes('/auth/login') || requestUrl.includes('/auth/google-login')
+
+  if (status === 401 && !isLoginAttempt) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+
+    if (!AUTH_PAGES.includes(window.location.pathname)) {
+      window.location.href = '/login'
+    }
+  }
+}
+
+const attachToken = (config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+}
+
+// ─── JSON instance ───────────────────────────────────────────────────────────
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -14,65 +47,25 @@ const api = axios.create({
   }
 })
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    const user = localStorage.getItem('user')
-    
-    // Enhanced debugging
-    console.log('🔍 Token exists:', !!token)
-    console.log('🔍 Token length:', token ? token.length : 0)
-    console.log('🔍 User exists:', !!user)
-    console.log('🔍 User data:', user ? JSON.parse(user) : null)
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-      console.log('✅ Authorization header added')
-    } else {
-      console.log('❌ No token found in localStorage')
-    }
-    
-    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`)
-    console.log('🔍 Request headers:', config.headers)
-    
-    return config
-  },
-  (error) => {
-    console.error('❌ API Request error:', error)
-    return Promise.reject(error)
-  }
-)
+api.interceptors.request.use(attachToken, (error) => Promise.reject(error))
 
-// Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => {
-    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - Status: ${response.status}`)
-    return response
-  },
+  (response) => response,
   (error) => {
-    console.error('❌ API Response error details:')
-    console.error('  Status:', error.response?.status)
-    console.error('  Status Text:', error.response?.statusText)
-    console.error('  Data:', error.response?.data)
-    console.error('  Headers:', error.response?.headers)
-    console.error('  Full Error:', error)
-    
-    if (error.response?.status === 401) {
-      console.log('🔐 401 error - clearing storage and redirecting to login')
-      localStorage.removeItem('token')
-      localStorage.removeItem('user') // Also clear user data
-      
-      // Only redirect if not already on login page
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
-      }
+    if (import.meta.env.DEV) {
+      console.error('API error:', {
+        url: error.config?.url,
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      })
     }
+    handleUnauthorized(error)
     return Promise.reject(error)
   }
 )
 
-// Create form data axios instance for file uploads
+// ─── Multipart instance (file uploads) ───────────────────────────────────────
 const apiFormData = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
@@ -81,27 +74,12 @@ const apiFormData = axios.create({
   }
 })
 
-// Add auth token to form data requests
-apiFormData.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error)
-)
+apiFormData.interceptors.request.use(attachToken, (error) => Promise.reject(error))
 
-// Handle form data response errors
 apiFormData.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user') // Also clear user data
-      window.location.href = '/login'
-    }
+    handleUnauthorized(error)
     return Promise.reject(error)
   }
 )

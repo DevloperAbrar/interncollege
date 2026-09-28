@@ -3,154 +3,141 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
+
+// Load environment variables FIRST (before anything reads process.env)
+dotenv.config();
+
 const connectDB = require('./config/database');
 const analyticsRoutes = require('./routes/analytics');
 const deptAdminRoutes = require('./routes/deptAdmin');
 const departmentRoutes = require('./routes/department');
-const path = require('path');
-const fs = require('fs');
 const studentProgressRoutes = require('./routes/studentProgress');
-const adminLogsRoutes = require('./routes/adminLogs')
-
-// Load environment variables
-dotenv.config();
+const adminLogsRoutes = require('./routes/adminLogs');
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const mentorRoutes = require('./routes/mentor');
+const studentRoutes = require('./routes/student');
+const uploadRoutes = require('./routes/upload');
+const googleDriveService = require('./services/googleDriveService');
 
 // ─── Ensure uploads directory and subfolders exist ───────────────────────────
+// NOTE: On Render the disk is ephemeral – files here are lost on every
+// deploy/restart. Keep using Google Drive for anything that must persist.
 const uploadsDir = path.join(__dirname, 'uploads');
 const subFolders = ['registration', 'mpr', 'final-report', 'bulk', 'general'];
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Created uploads directory');
-} else {
-  console.log('📁 Uploads directory exists');
 }
-subFolders.forEach(sub => {
+subFolders.forEach((sub) => {
   const subPath = path.join(uploadsDir, sub);
   if (!fs.existsSync(subPath)) fs.mkdirSync(subPath, { recursive: true });
 });
 
-// Import routes
-const authRoutes = require('./routes/auth');
-console.log('✅ Auth routes loaded');
-const adminRoutes = require('./routes/admin');
-console.log('✅ Admin routes loaded');
-const mentorRoutes = require('./routes/mentor');
-console.log('✅ Mentor routes loaded');
-const studentRoutes = require('./routes/student');
-console.log('✅ Student routes loaded');
-const uploadRoutes = require('./routes/upload');
-console.log('✅ Upload routes loaded');
-
 const app = express();
 
-// Connect to MongoDB
+// ─── Render / reverse proxy ──────────────────────────────────────────────────
+// Render sits behind a proxy. Without this, express-rate-limit sees every user
+// as the same IP and req.ip is wrong.
+app.set('trust proxy', 1);
+
+// ─── Database ────────────────────────────────────────────────────────────────
 connectDB();
 
-// ══════════════════════════════════════════════════════════════
-// ✅ ADD THIS — force Google Drive to initialize and log at boot,
-// instead of waiting silently for the first real upload attempt.
-// ══════════════════════════════════════════════════════════════
-const googleDriveService = require('./services/googleDriveService');
-
+// ─── Google Drive check at boot ──────────────────────────────────────────────
 console.log('🚀 Testing Google Drive connection at startup...');
-googleDriveService.testConnection()
+googleDriveService
+  .testConnection()
   .then((result) => {
-    console.log('✅✅✅ Google Drive READY:', result.user.emailAddress);
+    console.log('✅ Google Drive READY:', result.user.emailAddress);
   })
   .catch((err) => {
-    console.error('💥💥💥 GOOGLE DRIVE FAILED AT BOOT 💥💥💥');
-    console.error('Error message:', err.message);
-    console.error('This is why uploads are failing. Fix this before anything else.');
+    console.error('💥 GOOGLE DRIVE FAILED AT BOOT:', err.message);
+    console.error('Uploads will fail until this is fixed.');
   });
-// ══════════════════════════════════════════════════════════════
-// END of added block
-// ══════════════════════════════════════════════════════════════
+
+// ─── CORS (must be FIRST so every response – even errors/429 – has headers) ──
+const normalizeOrigin = (o) => String(o).trim().replace(/\/+$/, '');
+
+const allowedOrigins = new Set(
+  [
+    'http://localhost:5173',
+    'http://localhost:5000',
+    'https://www.ipm.mitsgwalior.in',
+    'https://interncollegewebsite.onrender.com',
+    // FRONTEND_URL / CORS_ORIGINS may hold one URL or several comma-separated URLs
+    ...(process.env.FRONTEND_URL || '').split(','),
+    ...(process.env.CORS_ORIGINS || '').split(',')
+  ]
+    .map(normalizeOrigin)
+    .filter(Boolean)
+);
+
+console.log('🌐 Allowed CORS origins:', [...allowedOrigins]);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Requests with no Origin header (curl, health checks, server-to-server)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.has(normalizeOrigin(origin))) {
+      return callback(null, true);
+    }
+
+    console.warn(`🚫 CORS blocked origin: ${origin}`);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400
+};
+
+// app.use(cors()) also answers OPTIONS preflight requests automatically.
+app.use(cors(corsOptions));
 
 // ─── Security ────────────────────────────────────────────────────────────────
-// Relax helmet's CSP so that PDF embeds work in the browser
-app.use(helmet({
-  contentSecurityPolicy: false, // allow PDF inline preview
-  crossOriginResourcePolicy: { policy: 'cross-origin' } // allow files to be loaded cross-origin
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // allow PDF inline preview
+    crossOriginResourcePolicy: { policy: 'cross-origin' } // allow files to load cross-origin
+  })
+);
 
-// ...everything else below is UNCHANGED, don't touch it
-
-// Rate limiting
+// ─── Rate limiting ───────────────────────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500, // increased to 500 to accommodate file requests
-  message: 'Too many requests from this IP, please try again later.'
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests from this IP, please try again later.' }
 });
 app.use(limiter);
 
-// ─── CORS ────────────────────────────────────────────────────────────────────
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://www.ipm.mitsgwalior.in',
-  'http://localhost:5000',
-  process.env.FRONTEND_URL
-].filter(Boolean);
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  }
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
-
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// ─── Body parsing ─────────────────────────────────────────────────────────────
+// ─── Body parsing ────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ─── STATIC FILES: serve the uploads folder ──────────────────────────────────
-// Files are accessible at:  http://localhost:5000/uploads/mpr/filename.pdf
-// Auth is NOT enforced here so the browser can embed/open PDFs directly.
-// If you want auth on file access, use the /api/files/:path route below instead.
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.pdf')) {
-      // Allow PDFs to be displayed inline in the browser
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', 'inline');
+// ─── Static files: uploads folder ────────────────────────────────────────────
+app.use(
+  '/uploads',
+  express.static(path.join(__dirname, 'uploads'), {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.pdf')) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+      }
     }
-  }
-}));
+  })
+);
 
-// ─── API Routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
-console.log('✅ Auth routes registered');
+// ─── Health checks ───────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({ status: 'OK', message: 'InternTrack Backend is running' });
+});
 
-app.use('/api/analytics', analyticsRoutes);
-console.log('✅ Analytics routes registered');
-
-app.use('/api/admin', adminRoutes);
-console.log('✅ Admin routes registered');
-
-app.use('/api/mentor', mentorRoutes);
-console.log('✅ Mentor routes registered');
-
-app.use('/api/student', studentRoutes);
-console.log('✅ Student routes registered');
-
-app.use('/api/upload', uploadRoutes);
-console.log('✅ Upload routes registered');
-
-
-app.use('/api/dept-admin', deptAdminRoutes);
-app.use('/api/departments', departmentRoutes);
-// ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -159,14 +146,32 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ─── Error handling ───────────────────────────────────────────────────────────
+// ─── API routes ──────────────────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/logs', adminLogsRoutes);
+app.use('/api/mentor', mentorRoutes);
+app.use('/api/student', studentRoutes);
+app.use('/api/student-progress', studentProgressRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/dept-admin', deptAdminRoutes);
+app.use('/api/departments', departmentRoutes);
+console.log('✅ All routes registered');
+
+// ─── 404 (after all routes) ──────────────────────────────────────────────────
+app.use('/*path', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
+
+// ─── Error handling (must be LAST) ───────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       success: false,
       message: 'Validation Error',
-      errors: Object.values(err.errors).map(e => e.message)
+      errors: Object.values(err.errors).map((e) => e.message)
     });
   }
   if (err.name === 'CastError') {
@@ -181,17 +186,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.use('/api/student-progress', studentProgressRoutes);
-app.use('/api/admin/logs', adminLogsRoutes)
-// 404
-app.use('/*path', (req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
-});
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 InternTrack Backend Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
-  console.log(`📂 Files served at: http://localhost:${PORT}/uploads/`);
 });

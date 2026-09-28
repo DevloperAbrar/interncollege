@@ -86,7 +86,7 @@ const validateRegistrationSubmission = [
   body('semesterType')
     .notEmpty()
     .withMessage('Semester type is required')
-    .isIn(['6th_internship', '7th_internship', '8th_internship', '8th_project', 'any_internship'])
+    .isIn(['8th_internship', 'any_internship'])
     .withMessage('Invalid semester type'),
 
   // Common fields for internships

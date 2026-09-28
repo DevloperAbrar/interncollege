@@ -105,18 +105,18 @@ const uploadFilesToDrive = async (req, student, driveFolderId) => {
 // ─── Semester → available choices ─────────────────────────────────────────────
 const getSemesterChoicesForStudent = (semesterNumber, completedSubmissions, assignedSemester) => {
   const completedTypes = new Set(completedSubmissions.map(s => s.semesterType))
-  const validTypes = ['any_internship', '6th_internship', '7th_internship', '8th_internship', '8th_project']
+  const validTypes = ['any_internship', '8th_internship']
 
-  // If mentor assigned a specific semester type, that's the only option — regardless of which one it is
+  // If mentor assigned a specific semester type, that's the only option
   if (assignedSemester && validTypes.includes(assignedSemester) && !completedTypes.has(assignedSemester)) {
     return [assignedSemester]
   }
 
-  // Fallback for students with no assignedSemester: only offer 8th-sem options once they reach semester 8
+  // Fallback for students with no assignedSemester: only offer options once they reach semester 8
   const sem = parseInt(semesterNumber) || 0
   if (sem < 8) return []
 
-  return ['8th_internship', '8th_project'].filter(s => !completedTypes.has(s))
+  return ['8th_internship', 'any_internship'].filter(s => !completedTypes.has(s))
 }
 
 // ─── GET /api/student/dashboard ──────────────────────────────────────────────

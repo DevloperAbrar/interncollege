@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useApi } from '../../hooks/useApi'
 import { studentService } from '../../services/studentService'
 import {
-  GraduationCap, Building, Code, BookOpen, ArrowRight,
-  CheckCircle, Users, Calendar, Award, TrendingUp, Clock
+  GraduationCap, BookOpen, ArrowRight,
+  CheckCircle, Calendar, Award, TrendingUp, Clock
 } from 'lucide-react'
 
 const ALL_OPTIONS = {
@@ -19,28 +19,6 @@ const ALL_OPTIONS = {
     features: ['Flexible documentation', 'Custom duration support', 'Basic progress tracking', 'Academic credit eligibility'],
     timeline: 'Variable duration'
   },
-  '6th_internship': {
-    id: '6th_internship',
-    title: '6th Semester Internship',
-    description: 'Mid-program industry training with focused internship program.',
-    icon: Users,
-    color: 'from-green-500 to-emerald-500',
-    bgColor: 'from-green-50 to-emerald-50',
-    borderColor: 'border-green-200',
-    features: ['Simple registration', 'Basic documentation', 'Final report submission', 'Industry exposure'],
-    timeline: '2–4 months'
-  },
-  '7th_internship': {
-    id: '7th_internship',
-    title: '7th Semester Internship',
-    description: 'Pre-final year industry experience with comprehensive tracking.',
-    icon: Building,
-    color: 'from-blue-500 to-indigo-500',
-    bgColor: 'from-blue-50 to-indigo-50',
-    borderColor: 'border-blue-200',
-    features: ['Registration & approval', '3 Monthly progress reports', '1 Mid-semester evaluation', 'Final report'],
-    timeline: '4–6 months'
-  },
   '8th_internship': {
     id: '8th_internship',
     title: '8th Semester Internship',
@@ -51,23 +29,12 @@ const ALL_OPTIONS = {
     borderColor: 'border-purple-200',
     features: ['Complete registration', '3 MPR submissions', '1 Mid-semester evaluation', 'Final report'],
     timeline: '6+ months'
-  },
-  '8th_project': {
-    id: '8th_project',
-    title: '8th Semester Project',
-    description: 'Research or development project for final semester.',
-    icon: Code,
-    color: 'from-indigo-500 to-blue-600',
-    bgColor: 'from-indigo-50 to-blue-50',
-    borderColor: 'border-indigo-200',
-    features: ['Project proposal', 'Research methodology', 'Conference tracking', 'Publication status'],
-    timeline: 'Full semester'
   }
 }
 const getChoicesForSemester = (semesterNumber) => {
   const sem = parseInt(semesterNumber) || 0
   if (sem < 8) return []
-  return ['8th_internship', '8th_project']
+  return ['8th_internship', 'any_internship']
 }
 
 const SemesterChoice = () => {

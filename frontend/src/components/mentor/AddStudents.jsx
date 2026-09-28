@@ -4,8 +4,6 @@ import { Search, UserPlus, Check, Filter, ChevronDown, UserCheck } from 'lucide-
 
 const SEMESTER_OPTIONS = [
   { value: 'any_internship',   label: 'Any Internship' },
-  { value: '6th_internship',   label: '6th Sem Internship' },
-  { value: '7th_internship',   label: '7th Sem Internship' },
   { value: '8th_internship',   label: '8th Sem Internship / Project' },
 ]
 

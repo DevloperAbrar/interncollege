@@ -75,9 +75,9 @@ const RegistrationForm = () => {
   // 'processing' = 100% sent, waiting on server to save/validate/respond
   const [submitPhase, setSubmitPhase] = useState('uploading')
 
-  const show8thTypeSelection = semesterType === '8th_internship' && !selectedSubType
-  const isProjectType = selectedSubType === 'project' || semesterType === '8th_project'
-  const isInternshipType = !isProjectType
+  const show8thTypeSelection = false
+  const isProjectType = false
+  const isInternshipType = true
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -223,12 +223,7 @@ const RegistrationForm = () => {
     try {
       const formDataToSend = new FormData()
 
-      let finalSemesterType = semesterType
-      if (semesterType === '8th_internship') {
-        finalSemesterType = selectedSubType === 'project' ? '8th_project' : '8th_internship'
-      }
-
-      formDataToSend.append('semesterType', finalSemesterType)
+      formDataToSend.append('semesterType', semesterType)
 
       Object.keys(formData).forEach(key => {
         const value = formData[key]

@@ -18,7 +18,8 @@ const {
   getSubmissionHistory,
   sendMonthlyReminder,
   reviewMPR,
-  updateSubmissionDetails
+  updateSubmissionDetails,
+  updateReviewResult
 } = require('../controllers/mentorController');
 
 // Apply auth and mentor role check to all routes
@@ -52,6 +53,14 @@ router.put('/submissions/:id/review', [
   checkValidationResult
 ], reviewSubmission);
 
+// Edit marks / feedback of an already reviewed item
+router.put('/submissions/:id/result', [
+  body('feedback')
+    .optional()
+    .isLength({ max: 1000 })
+    .withMessage('Feedback must not exceed 1000 characters'),
+  checkValidationResult
+], updateReviewResult);
 // MPR-specific review route
 router.put('/mpr/:mprId/review', [
   body('action')

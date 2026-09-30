@@ -1279,88 +1279,96 @@ const getAssignedSubmissions = async (req, res) => {
 // FINAL FIX: getSubmissionDetails function with CORRECT stipend field mapping
 // The issue is the field names in RegistrationForm.jsx vs what's saved in DB
 
+// ─── Review helpers ──────────────────────────────────────────────────────────
+const MPR_TYPES = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
+
+// Max marks per field (must match the marks forms in ReviewSubmissions.jsx)
+const MARK_LIMITS = {
+  registration: {
+    objectiveProblemIdentification: 5,
+    proposedMethodology: 5,
+    relevanceRealWorld: 5,
+    synopsisPresentation: 5
+  },
+  midSem1: {
+    dailyDiary: 10,
+    expectedAchievedOutcomes: 20,
+    briefReport: 30,
+    presentationViva: 40
+  },
+  finalReport: {
+    dailyDiary: 20,
+    projectOutcomes: 30,
+    objectiveLiteratureReview: 20,
+    methodologyArea: 20,
+    workDescription: 20,
+    dataResultDiscussion: 20,
+    overallFormatPlagiarism: 20,
+    defineObjective: 20,
+    contentPresentation: 20,
+    presentationSkill: 20,
+    socialIndustrialRelevance: 20,
+    questionAnswer: 20
+  }
+};
+const SIMPLE_MPR_MAX = 10;
+
+const resolveReviewerName = async (reviewer) => {
+  if (!reviewer) return '';
+  if (reviewer.name) return reviewer.name;
+  const user = await User.findById(reviewer._id || reviewer).select('name');
+  return user?.name || '';
+};
+
+const cleanMarks = (limits, input) => {
+  if (!input || typeof input !== 'object') {
+    throw Object.assign(new Error('Marks are required'), { status: 400 });
+  }
+  const cleaned = {};
+  Object.entries(limits).forEach(([field, max]) => {
+    const raw = input[field];
+    const value = raw === undefined || raw === '' || raw === null ? 0 : Number(raw);
+    if (Number.isNaN(value) || value < 0 || value > max) {
+      throw Object.assign(new Error(`${field} must be between 0 and ${max}`), { status: 400 });
+    }
+    cleaned[field] = value;
+  });
+  return cleaned;
+};
+
+const buildRegistrationDetails = (plain) => {
+  const data = plain.registrationData || {};
+  const amount = data.stipendAmount;
+  const hasStipend = data.hasStipend || (amount && Number(amount) > 0);
+  return {
+    ...data,
+    stipend: hasStipend && amount && Number(amount) > 0 ? `₹${amount}` : 'No Stipend'
+  };
+};
+
+// @desc    Get submission / review details
+// @route   GET /api/mentor/submissions/:id
+// ids: "<submissionId>"  or  "<submissionId>_<registration|finalReport|mpr1|mpr2|mpr3|midSem1>"
+// @access  Private (Mentor only)
 const getSubmissionDetails = async (req, res) => {
   try {
     const { id } = req.params;
     const mentorId = req.user._id;
 
-    console.log(`🔍 Getting submission details for: ${id}`);
+    const [submissionId, suffix] = id.split('_');
+    const isMpr = MPR_TYPES.includes(suffix);
+    const isRegistration = suffix === 'registration';
+    const isFinalReport = suffix === 'finalReport';
 
-    // Check if this is an MPR review request
-    if (id.includes('_')) {
-      const [originalSubmissionId, mprType] = id.split('_');
-
-      const submission = await Submission.findById(originalSubmissionId)
-        .populate('student', 'name email enrollmentNo branch phone')
-        .populate('mentor', 'name email')
-        .populate('registrationReview.reviewedBy', 'name')
-        .populate('finalReportReview.reviewedBy', 'name');
-
-      if (!submission) {
-        return errorResponse(res, 'Submission not found', 404);
-      }
-
-      if (submission.mentor._id.toString() !== mentorId.toString()) {
-        return errorResponse(res, 'Not authorized to view this submission', 403);
-      }
-
-      const mprData = submission.mprSubmissions?.[mprType];
-      if (!mprData) {
-        return errorResponse(res, `${mprType.toUpperCase()} submission not found`, 404);
-      }
-
-      // Send COMPLETE registration data with MPR
-      const mprSubmissionDetails = {
-        _id: id,
-        student: submission.student,
-        mentor: submission.mentor,
-        studentName: submission.studentName || submission.student?.name,
-        enrollmentNo: submission.enrollmentNo || submission.student?.enrollmentNo,
-        branch: submission.branch || submission.student?.branch,
-        email: submission.email || submission.student?.email,
-        phone: submission.student?.phone,
-        semesterType: submission.semesterType,
-        createdAt: mprData.submittedAt,
-        updatedAt: mprData.submittedAt,
-        reviewType: 'mpr',
-        currentReviewStatus: mprData.status,
-
-        // COMPLETE registration data - send EVERYTHING
-        registrationData: submission.registrationData, // Send the entire object
-        registrationDetails: {
-          ...submission.registrationData, // Spread all fields
-          // Computed/formatted fields
-          duration: submission.registrationData?.duration,
-          stipend: (() => {
-            const amount = submission.registrationData?.stipendAmount;
-            const hasStipend = submission.registrationData?.hasStipend || (amount && Number(amount) > 0);
-            return hasStipend && amount && Number(amount) > 0 ? `₹${amount}` : 'No Stipend';
-          })()
-        },
-
-        mprDetails: {
-          type: mprType,
-          document: mprData.document,
-          submittedAt: mprData.submittedAt,
-          status: mprData.status,
-          feedback: mprData.feedback,
-          reviewedAt: mprData.reviewedAt,
-          reviewedBy: mprData.reviewedBy,
-          marks: mprData.marks
-        },
-
-        mprType: mprType,
-        feedback: mprData.feedback,
-        reviewedAt: mprData.reviewedAt,
-        reviewedBy: mprData.reviewedBy ? { name: 'Mentor' } : null
-      };
-
-      console.log(`✅ MPR details retrieved for ${mprType}`);
-      return successResponse(res, mprSubmissionDetails, 'MPR submission details retrieved successfully');
+    if (suffix && !isMpr && !isRegistration && !isFinalReport) {
+      return errorResponse(res, 'Invalid submission reference', 400);
     }
 
-    // Handle regular submission details (Registration or Final Report)
-    const submission = await Submission.findById(id)
+    if (!require('mongoose').Types.ObjectId.isValid(submissionId)) {
+      return errorResponse(res, 'Submission not found', 404);
+    }
+
+    const submission = await Submission.findById(submissionId)
       .populate('student', 'name email enrollmentNo branch phone')
       .populate('mentor', 'name email')
       .populate('registrationReview.reviewedBy', 'name')
@@ -1374,70 +1382,129 @@ const getSubmissionDetails = async (req, res) => {
       return errorResponse(res, 'Not authorized to view this submission', 403);
     }
 
-    // Determine current review type and status
-    let currentReviewStatus = 'completed';
-    let reviewType = 'registration';
+    const plain = submission.toObject();
 
-    if (submission.registrationReview.status === 'pending') {
-      currentReviewStatus = 'pending';
-      reviewType = 'registration';
-    } else if (submission.finalReportReview.status === 'pending') {
-      currentReviewStatus = 'pending';
-      reviewType = 'finalReport';
+    // ─── MPR / Mid-sem review ────────────────────────────────────────────────
+    if (isMpr) {
+      const mprData = plain.mprSubmissions?.[suffix];
+      if (!mprData) {
+        return errorResponse(res, `${suffix.toUpperCase()} submission not found`, 404);
+      }
+
+      const reviewerName = await resolveReviewerName(mprData.reviewedBy);
+
+      return successResponse(res, {
+        _id: id,
+        originalSubmissionId: plain._id,
+        student: plain.student,
+        mentor: plain.mentor,
+        studentName: plain.studentName || plain.student?.name,
+        enrollmentNo: plain.enrollmentNo || plain.student?.enrollmentNo,
+        branch: plain.branch || plain.student?.branch,
+        email: plain.email || plain.student?.email,
+        phone: plain.student?.phone,
+        semesterType: plain.semesterType,
+        createdAt: mprData.submittedAt,
+        updatedAt: mprData.reviewedAt || mprData.submittedAt,
+        reviewType: 'mpr',
+        currentReviewStatus: mprData.status,
+
+        registrationData: plain.registrationData,
+        registrationDetails: buildRegistrationDetails(plain),
+
+        mprDetails: {
+          type: suffix,
+          document: mprData.document,
+          submittedAt: mprData.submittedAt,
+          status: mprData.status,
+          feedback: mprData.feedback,
+          reviewedAt: mprData.reviewedAt,
+          reviewedBy: mprData.reviewedBy,
+          marks: mprData.marks
+        },
+
+        mprType: suffix,
+        feedback: mprData.feedback,
+        reviewedAt: mprData.reviewedAt,
+        reviewedBy: reviewerName ? { name: reviewerName } : null,
+
+        reviewInfo: {
+          status: mprData.status,
+          feedback: mprData.feedback || '',
+          reviewedAt: mprData.reviewedAt,
+          reviewedByName: reviewerName,
+          marks: mprData.marks ?? null
+        }
+      }, 'MPR submission details retrieved successfully');
     }
 
+    // ─── Registration / Final report review ─────────────────────────────────
+    let reviewType = 'registration';
+    let currentReviewStatus = 'completed';
+
+    if (isRegistration) {
+      reviewType = 'registration';
+      currentReviewStatus = plain.registrationReview?.status || 'pending';
+    } else if (isFinalReport) {
+      reviewType = 'finalReport';
+      currentReviewStatus = plain.finalReportReview?.status || 'pending';
+    } else if (plain.registrationReview?.status === 'pending') {
+      reviewType = 'registration';
+      currentReviewStatus = 'pending';
+    } else if (plain.finalReportReview?.status === 'pending') {
+      reviewType = 'finalReport';
+      currentReviewStatus = 'pending';
+    }
+
+    const review = reviewType === 'registration' ? plain.registrationReview : plain.finalReportReview;
+    const reviewerName = await resolveReviewerName(review?.reviewedBy);
+
     const submissionData = {
-      ...submission.toObject(),
+      ...plain,
+      // History items keep their composite id so reload / edit / marks update hit the right review
+      _id: isRegistration || isFinalReport ? id : plain._id,
+      originalSubmissionId: plain._id,
       reviewType,
       currentReviewStatus,
 
-      // Send COMPLETE registration data - ALL fields
-      registrationData: submission.registrationData, // Entire object
+      registrationData: plain.registrationData,
       registrationDetails: {
-        ...submission.registrationData, // Spread all fields
-        // Add computed fields
-        duration: submission.registrationData?.duration,
-        stipend: (() => {
-          const amount = submission.registrationData?.stipendAmount;
-          const hasStipend = submission.registrationData?.hasStipend || (amount && Number(amount) > 0);
-          return hasStipend && amount && Number(amount) > 0 ? `₹${amount}` : 'No Stipend';
-        })(),
-        reviewStatus: submission.registrationReview?.status,
-        reviewFeedback: submission.registrationReview?.feedback,
-        reviewedAt: submission.registrationReview?.reviewedAt,
-        reviewedBy: submission.registrationReview?.reviewedBy,
-        marks: submission.registrationReview?.marks
+        ...buildRegistrationDetails(plain),
+        reviewStatus: plain.registrationReview?.status,
+        reviewFeedback: plain.registrationReview?.feedback,
+        reviewedAt: plain.registrationReview?.reviewedAt,
+        reviewedBy: plain.registrationReview?.reviewedBy,
+        marks: plain.registrationReview?.marks
       },
 
-      // Send COMPLETE final report data - ALL fields
-      finalReportDetails: submission.finalReport ? {
-        ...submission.finalReport, // Spread all fields from finalReport
-        reviewStatus: submission.finalReportReview?.status,
-        reviewFeedback: submission.finalReportReview?.feedback,
-        reviewedAt: submission.finalReportReview?.reviewedAt,
-        reviewedBy: submission.finalReportReview?.reviewedBy,
-        marks: submission.finalReportReview?.marks
+      finalReportDetails: plain.finalReport ? {
+        ...plain.finalReport,
+        reviewStatus: plain.finalReportReview?.status,
+        reviewFeedback: plain.finalReportReview?.feedback,
+        reviewedAt: plain.finalReportReview?.reviewedAt,
+        reviewedBy: plain.finalReportReview?.reviewedBy,
+        marks: plain.finalReportReview?.marks
       } : null,
 
-      feedback: reviewType === 'registration' ?
-        submission.registrationReview.feedback :
-        submission.finalReportReview.feedback,
-      reviewedAt: reviewType === 'registration' ?
-        submission.registrationReview.reviewedAt :
-        submission.finalReportReview.reviewedAt,
-      reviewedBy: reviewType === 'registration' ?
-        submission.registrationReview.reviewedBy :
-        submission.finalReportReview.reviewedBy
+      feedback: review?.feedback,
+      reviewedAt: review?.reviewedAt,
+      reviewedBy: review?.reviewedBy,
+
+      reviewInfo: {
+        status: review?.status,
+        feedback: review?.feedback || '',
+        reviewedAt: review?.reviewedAt,
+        reviewedByName: reviewerName,
+        marks: review?.marks || null
+      }
     };
 
-    // Add MPR status for 7th/8th internships
     if (['7th_internship', '8th_internship'].includes(submission.semesterType)) {
       submissionData.allMPRApproved = submission.areAllMPRSubmissionsApproved?.() || false;
       submissionData.canApproveFinalReport = submission.isReadyForFinalReport?.() || false;
-      submissionData.mprStatus = submission.mprSubmissions || {};
+      submissionData.mprStatus = plain.mprSubmissions || {};
     }
 
-    console.log(`✅ Submission details retrieved for ${reviewType} review`);
     successResponse(res, submissionData, 'Submission details retrieved successfully');
   } catch (error) {
     console.error('❌ Get submission details error:', error);
@@ -1445,6 +1512,102 @@ const getSubmissionDetails = async (req, res) => {
   }
 };
 
+// @desc    Edit marks / feedback of an already reviewed (approved / rejected) item
+// @route   PUT /api/mentor/submissions/:id/result
+// id must be "<submissionId>_<registration|finalReport|mpr1|mpr2|mpr3|midSem1>"
+// @access  Private (Mentor only)
+const updateReviewResult = async (req, res) => {
+  try {
+    const mentorId = req.user._id;
+    const { id } = req.params;
+    const { marks, feedback } = req.body;
+
+    const [submissionId, suffix] = id.split('_');
+    const isMpr = MPR_TYPES.includes(suffix);
+
+    if (
+      !require('mongoose').Types.ObjectId.isValid(submissionId) ||
+      !(isMpr || suffix === 'registration' || suffix === 'finalReport')
+    ) {
+      return errorResponse(res, 'Invalid review reference', 400);
+    }
+
+    const submission = await Submission.findById(submissionId).populate('student', 'name email');
+    if (!submission) {
+      return errorResponse(res, 'Submission not found', 404);
+    }
+
+    if (submission.mentor.toString() !== mentorId.toString()) {
+      return errorResponse(res, 'Not authorized to update this review', 403);
+    }
+
+    let review;
+    if (suffix === 'registration') review = submission.registrationReview;
+    else if (suffix === 'finalReport') review = submission.finalReportReview;
+    else review = submission.mprSubmissions?.[suffix];
+
+    if (!review || !['approved', 'rejected'].includes(review.status)) {
+      return errorResponse(res, 'Only approved or rejected reviews can be edited here', 400);
+    }
+
+    // Feedback
+    if (feedback !== undefined) {
+      const text = String(feedback).trim();
+      if (text.length > 1000) {
+        return errorResponse(res, 'Feedback must not exceed 1000 characters', 400);
+      }
+      if (review.status === 'rejected' && !text) {
+        return errorResponse(res, 'Feedback is required for a rejected review', 400);
+      }
+      review.feedback = text;
+    }
+
+    // Marks (approved reviews only)
+    if (marks !== undefined && marks !== null) {
+      if (review.status !== 'approved') {
+        return errorResponse(res, 'Marks can only be edited for approved reviews', 400);
+      }
+
+      if (suffix === 'registration') {
+        submission.registrationReview.marks = cleanMarks(MARK_LIMITS.registration, marks);
+      } else if (suffix === 'finalReport') {
+        submission.finalReportReview.marks = cleanMarks(MARK_LIMITS.finalReport, marks);
+      } else if (suffix === 'midSem1') {
+        submission.mprSubmissions.midSem1.marks = cleanMarks(MARK_LIMITS.midSem1, marks);
+      } else {
+        const value = Number(marks);
+        if (Number.isNaN(value) || value < 0 || value > SIMPLE_MPR_MAX) {
+          return errorResponse(res, `Marks must be between 0 and ${SIMPLE_MPR_MAX}`, 400);
+        }
+        submission.mprSubmissions[suffix].marks = value;
+      }
+    }
+
+    // Totals are recalculated by the Submission pre-save hook
+    await submission.save();
+
+    try {
+      const label = suffix === 'registration' ? 'Registration'
+        : suffix === 'finalReport' ? 'Final Report'
+          : suffix.toUpperCase();
+      await emailService.sendEmail(
+        submission.student.email,
+        'Review Updated by Mentor',
+        `Your mentor has updated the marks / feedback for your ${label} review.`
+      );
+    } catch (emailError) {
+      console.error('Email notification error:', emailError);
+    }
+
+    successResponse(res, { id }, 'Review updated successfully');
+  } catch (error) {
+    console.error('❌ Update review result error:', error);
+    if (error.status === 400) {
+      return errorResponse(res, error.message, 400);
+    }
+    errorResponse(res, 'Failed to update review: ' + error.message, 500);
+  }
+};
 
 
 // @desc    Get monthly submissions for monitoring
@@ -1934,6 +2097,7 @@ module.exports = {
   isEligibleForFinalReportReview,
   getSubmissionHistory,
   updateSubmissionDetails,
+  updateReviewResult,
   reviewMPR,
   addStudents ,
   getAvailableStudents ,

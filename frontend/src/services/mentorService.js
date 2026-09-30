@@ -50,6 +50,11 @@ export const mentorService = {
     const response = await apiFormData.put(`/mentor/submissions/${id}`, formData)
     return response.data
   },
+
+  updateReviewResult: async (id, payload) => {
+    const response = await api.put(`/mentor/submissions/${id}/result`, payload)
+    return response.data
+  },
   
   reviewSubmission: async (id, action, feedback = '', marks = null) => {
     const response = await api.put(`/mentor/submissions/${id}/review`, {

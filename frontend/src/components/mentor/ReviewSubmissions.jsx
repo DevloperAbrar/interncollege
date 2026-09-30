@@ -247,6 +247,7 @@ const MidSemMarks = ({ marks, setMarks, semNumber }) => {
   const getMax = (field) => {
     switch (field) {
       case 'dailyDiary':
+        return 10;
       case 'expectedAchievedOutcomes':
         return 20;
       case 'briefReport':
@@ -786,6 +787,252 @@ const RegistrationEditForm = ({
     </div>
   )
 }
+
+// ─── Review result panel (shown for approved / rejected reviews) ─────────────
+const MARK_FIELDS = {
+  registration: [
+    ['objectiveProblemIdentification', 'Objective / Problem Identification / Topic Selection', 5],
+    ['proposedMethodology', 'Proposed Methodology / Technical Details & Timeline', 5],
+    ['relevanceRealWorld', 'Relevance with Real World Problem', 5],
+    ['synopsisPresentation', 'Synopsis / Presentation', 5]
+  ],
+  midSem: [
+    ['dailyDiary', 'Internship/Project Daily Diary', 10],
+    ['expectedAchievedOutcomes', 'Expected/Achieved Outcomes & Social Relevance', 20],
+    ['briefReport', 'Brief Internship/Project Report', 30],
+    ['presentationViva', 'Presentation & Viva', 40]
+  ],
+  finalReport: [
+    ['dailyDiary', 'Internship/Project Daily Diary', 20],
+    ['projectOutcomes', 'Internship/Project Outcomes', 30],
+    ['objectiveLiteratureReview', 'Objective & Literature Review', 20],
+    ['methodologyArea', 'Methodology/Area of Internship/Project', 20],
+    ['workDescription', 'Hardware/Software/Work Description', 20],
+    ['dataResultDiscussion', 'Data Collection/Result/Discussion/Conclusion', 20],
+    ['overallFormatPlagiarism', 'Overall Format & Plagiarism', 20],
+    ['defineObjective', 'Define Objective of the Work', 20],
+    ['contentPresentation', 'Content of the Presentation', 20],
+    ['presentationSkill', 'Presentation Skill', 20],
+    ['socialIndustrialRelevance', 'Relevance to Social & Industrial Need', 20],
+    ['questionAnswer', 'Question-Answer', 20]
+  ]
+}
+
+const MARK_TOTALS = { registration: 20, midSem: 100, finalReport: 250, simple: 10 }
+
+const ReviewResultPanel = ({ submission, onUpdated }) => {
+  const info = submission.reviewInfo || {}
+  const status = info.status || submission.currentReviewStatus
+  const mprType = submission.mprType
+
+  const kind =
+    submission.reviewType === 'registration'
+      ? 'registration'
+      : submission.reviewType === 'finalReport'
+        ? 'finalReport'
+        : mprType === 'midSem1' || mprType === 'midSem2'
+          ? 'midSem'
+          : 'simple'
+
+  const canEditMarks = status === 'approved'
+
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [marks, setMarks] = useState({})
+  const [feedback, setFeedback] = useState('')
+
+  const rows = MARK_FIELDS[kind] || []
+  const savedMarks = kind === 'simple' ? { simpleMarks: Number(info.marks) || 0 } : (info.marks || {})
+  const savedTotal =
+    kind === 'simple'
+      ? savedMarks.simpleMarks
+      : rows.reduce((sum, [key]) => sum + (Number(savedMarks[key]) || 0), 0)
+
+  const startEdit = () => {
+    setMarks(kind === 'simple' ? { simpleMarks: Number(info.marks) || 0 } : { ...(info.marks || {}) })
+    setFeedback(info.feedback || '')
+    setEditing(true)
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+
+    if (status === 'rejected' && !feedback.trim()) {
+      alert('Feedback is required for a rejected review')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload = { feedback }
+      if (canEditMarks) {
+        payload.marks = kind === 'simple' ? Number(marks.simpleMarks) || 0 : marks
+      }
+
+      const response = await mentorService.updateReviewResult(submission._id, payload)
+      if (response?.success) {
+        alert('Review updated successfully')
+        setEditing(false)
+        await onUpdated()
+      }
+    } catch (error) {
+      console.error('Error updating review:', error)
+      alert('Failed to update review: ' + (error.response?.data?.message || error.message))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className={`p-6 rounded-lg border-2 ${status === 'approved' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+        }`}
+    >
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+        <h4 className="font-semibold text-gray-900 flex items-center">
+          {status === 'approved' ? (
+            <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
+          ) : (
+            <XCircle className="h-5 w-5 mr-2 text-red-600" />
+          )}
+          Review Result
+        </h4>
+
+        {!editing ? (
+          <button
+            type="button"
+            onClick={startEdit}
+            className="px-4 py-2 rounded-md flex items-center bg-blue-500 text-white hover:bg-blue-600"
+          >
+            <Edit className="h-4 w-4 mr-1" />
+            {canEditMarks ? 'Edit Marks & Feedback' : 'Edit Feedback'}
+          </button>
+        ) : (
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="px-4 py-2 rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className={`px-4 py-2 rounded-md flex items-center text-white ${saving ? 'bg-green-300 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'
+                }`}
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-1" />
+                  Save Review
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Decision info */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
+        <div>
+          <strong className="text-gray-700">Decision:</strong>
+          <div className="mt-1">
+            <StatusBadge status={status} />
+          </div>
+        </div>
+        <div>
+          <strong className="text-gray-700">Reviewed By:</strong>
+          <div className="text-gray-900 mt-1">{info.reviewedByName || 'Mentor'}</div>
+        </div>
+        <div>
+          <strong className="text-gray-700">Reviewed On:</strong>
+          <div className="text-gray-900 mt-1">{info.reviewedAt ? formatDateTime(info.reviewedAt) : 'N/A'}</div>
+        </div>
+      </div>
+
+      {/* Marks */}
+      {canEditMarks && (
+        <div className="mb-4">
+          {editing ? (
+            <>
+              {kind === 'registration' && <RegistrationMarks marks={marks} setMarks={setMarks} />}
+              {kind === 'midSem' && (
+                <MidSemMarks marks={marks} setMarks={setMarks} semNumber={mprType === 'midSem2' ? 2 : 1} />
+              )}
+              {kind === 'simple' && (
+                <MPRMarks
+                  marks={marks.simpleMarks || 0}
+                  setMarks={(val) => setMarks({ simpleMarks: val })}
+                  mprType={mprType}
+                />
+              )}
+              {kind === 'finalReport' && <FinalReportMarks marks={marks} setMarks={setMarks} />}
+            </>
+          ) : (
+            <div className="bg-white p-4 rounded-lg border border-green-200">
+              <h5 className="font-semibold text-gray-900 mb-3">Marks Assigned</h5>
+
+              {kind === 'simple' ? (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-700">{mprType?.toUpperCase()} Document Quality & Content</span>
+                  <span className="font-medium text-gray-900">{savedMarks.simpleMarks} / {MARK_TOTALS.simple}</span>
+                </div>
+              ) : (
+                <div className="space-y-2 text-sm">
+                  {rows.map(([key, label, max]) => (
+                    <div key={key} className="flex justify-between border-b border-gray-100 pb-1">
+                      <span className="text-gray-700">{label}</span>
+                      <span className="font-medium text-gray-900">
+                        {Number(savedMarks[key]) || 0} / {max}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center mt-4 pt-3 border-t border-green-200">
+                <span className="font-semibold text-gray-900">Total</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {Number(savedTotal).toFixed(1)} / {MARK_TOTALS[kind]}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Feedback */}
+      <div>
+        <strong className="text-sm text-gray-700">
+          Feedback {status === 'rejected' && editing && <span className="text-red-500">*</span>}
+        </strong>
+        {editing ? (
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            rows={4}
+            maxLength={1000}
+            className="w-full mt-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder={status === 'rejected' ? 'Reason for rejection...' : 'Feedback (optional)...'}
+          />
+        ) : (
+          <div className="mt-1 bg-white p-3 rounded border border-gray-200 text-sm text-gray-900 whitespace-pre-wrap">
+            {info.feedback || 'No feedback provided'}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const ReviewSubmissions = () => {
   const { execute, loading } = useApi()
   const [pendingSubmissions, setPendingSubmissions] = useState([])
@@ -1278,7 +1525,7 @@ const ReviewSubmissions = () => {
                 <div className="flex items-center space-x-3">
                   <StatusBadge status={selectedSubmission?.currentReviewStatus || selectedSubmission?.status} />
 
-                  {editMode && selectedSubmission?.currentReviewStatus === 'pending' && (
+                  {editMode && (
                     <button
                       onClick={handleSaveEdits}
                       disabled={savingEdits}
@@ -1301,7 +1548,7 @@ const ReviewSubmissions = () => {
                     </button>
                   )}
 
-                  {selectedSubmission?.currentReviewStatus === 'pending' && (
+                  {selectedSubmission && (
                     <button
                       onClick={() => setEditMode(!editMode)}
                       disabled={savingEdits}
@@ -1380,6 +1627,18 @@ const ReviewSubmissions = () => {
                     )}
                   </div>
 
+                  {/* Review Result (approved / rejected) */}
+                  {['approved', 'rejected'].includes(selectedSubmission.currentReviewStatus) &&
+                    selectedSubmission.reviewInfo && (
+                      <ReviewResultPanel
+                        key={selectedSubmission._id}
+                        submission={selectedSubmission}
+                        onUpdated={async () => {
+                          await handleViewDetails(selectedSubmission._id)
+                          if (activeTab === 'history') loadSubmissionHistory()
+                        }}
+                      />
+                    )}
 
                   {/* Registration Details - Keep existing code */}
                   {/* Registration Details - Complete Display */}

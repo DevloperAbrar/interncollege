@@ -101,6 +101,19 @@ const extractDriveFileId = (url) => {
 };
 
 const updateSubmissionDetails = async (req, res) => {
+  const fs = require('fs');
+
+  // Remove any temp files multer left on disk (Drive service already deletes the ones it uploaded)
+  const cleanupTempFiles = () => {
+    Object.values(req.files || {}).flat().forEach((f) => {
+      try {
+        if (f?.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+      } catch (e) {
+        console.warn('Could not remove temp file:', e.message);
+      }
+    });
+  };
+
   try {
     console.log('📝 Starting submission update process...');
 
@@ -118,21 +131,49 @@ const updateSubmissionDetails = async (req, res) => {
     const submission = await Submission.findById(submissionId);
 
     if (!submission) {
+      cleanupTempFiles();
       return errorResponse(res, 'Submission not found', 404);
     }
 
     if (submission.mentor.toString() !== mentorId.toString()) {
+      cleanupTempFiles();
       return errorResponse(res, 'Not authorized to update this submission', 403);
+    }
+
+    // ─── Registration file rules (same as student side) ──────────────────────
+    // Documents: PDF only. Synopsis: PDF / PPT / PPTX. Max 2 MB each.
+    if (updateType === 'registration' && req.files) {
+      const REG_MAX_BYTES = 2 * 1024 * 1024;
+      const path = require('path');
+
+      for (const [fieldName, fileArr] of Object.entries(req.files)) {
+        const file = Array.isArray(fileArr) ? fileArr[0] : fileArr;
+        if (!file) continue;
+
+        const ext = path.extname(file.originalname).toLowerCase();
+        const allowedExts = fieldName === 'synopsisPPT' ? ['.pdf', '.ppt', '.pptx'] : ['.pdf'];
+
+        if (!allowedExts.includes(ext)) {
+          cleanupTempFiles();
+          return errorResponse(
+            res,
+            fieldName === 'synopsisPPT'
+              ? 'Internship synopsis must be a PDF, PPT or PPTX file.'
+              : 'Only PDF files are allowed for this document.',
+            400
+          );
+        }
+
+        if (file.size > REG_MAX_BYTES) {
+          cleanupTempFiles();
+          return errorResponse(res, 'File size too large. Maximum is 2MB per file.', 400);
+        }
+      }
     }
 
     const student = await User.findById(submission.student);
 
-    // ══════════════════════════════════════════════════════════════
-    // ✅ THIS is the block that changes — replace your existing
-    // "Handle file uploads" section with this exact block, in the
-    // exact same spot (right after `const student = ...` above,
-    // right before the `if (updateType === 'registration')` below).
-    // ══════════════════════════════════════════════════════════════
+    // ─── Upload new files to Drive ───────────────────────────────────────────
     let uploadedFiles = {};
     if (req.files && Object.keys(req.files).length > 0) {
       try {
@@ -148,35 +189,163 @@ const updateSubmissionDetails = async (req, res) => {
           studentData,
           req.files,
           mentorFolderId,
-          student.driveStudentFolderId,           // pass the cached ID (may be null first time)
-          async (newFolderId) => {                // persist it if it just got created
+          student.driveStudentFolderId,
+          async (newFolderId) => {
             await User.findByIdAndUpdate(student._id, { driveStudentFolderId: newFolderId });
           }
         );
 
         if (uploadResults.uploadedFiles) {
-          uploadResults.uploadedFiles.forEach(file => {
+          uploadResults.uploadedFiles.forEach((file) => {
             uploadedFiles[file.fieldName] = file.webViewLink;
           });
         }
+
+        // If some files failed, stop here instead of silently saving without them
+        if (uploadResults.errors && uploadResults.errors.length > 0) {
+          cleanupTempFiles();
+          const failed = uploadResults.errors.map((e) => e.fieldName).join(', ');
+          return errorResponse(res, `Failed to upload: ${failed}. Please try again.`, 500);
+        }
       } catch (uploadError) {
         console.error('File upload error:', uploadError);
+        cleanupTempFiles();
+        return errorResponse(res, 'Failed to upload document to Drive. Please try again.', 500);
       }
     }
-    // ══════════════════════════════════════════════════════════════
-    // END of replaced block. Everything below is UNCHANGED.
-    // ══════════════════════════════════════════════════════════════
 
-    // Update based on type
+    // ─── Update based on type ────────────────────────────────────────────────
     if (updateType === 'registration') {
-      const updatedData = { ...req.body };
-      delete updatedData.updateType;
-      Object.assign(updatedData, uploadedFiles);
+      const COMPANY_TYPES = ['startup', 'mnc', 'government', 'psu', 'academic_institute', 'research', 'other'];
+      const PROJECT_TYPES = ['software', 'hardware', 'software_hardware', 'experimental'];
+      const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+      const MOBILE_REGEX = /^[6-9]\d{9}$/;
 
-      submission.registrationData = {
-        ...submission.registrationData,
-        ...updatedData
-      };
+      // Only these fields can be edited by a mentor
+      const TEXT_FIELDS = [
+        'companyName', 'companyFullAddress', 'internshipTitle', 'internshipDomain',
+        'internshipType', 'typeOfWork', 'mentorName', 'mentorRole',
+        'hrName', 'projectTitle'
+      ];
+      const FILE_FIELDS = ['offerLetter', 'nocLetter', 'stipendProof', 'synopsisPPT', 'projectReport'];
+
+      const body = req.body;
+      const current = submission.registrationData?.toObject
+        ? submission.registrationData.toObject()
+        : { ...(submission.registrationData || {}) };
+      const updates = {};
+
+      // Plain text fields
+      TEXT_FIELDS.forEach((field) => {
+        if (body[field] !== undefined) {
+          const value = String(body[field]).trim();
+          if (!value) {
+            throw Object.assign(new Error(`${field} cannot be empty`), { status: 400 });
+          }
+          updates[field] = value;
+        }
+      });
+
+      // Company type + custom "Other" value
+      if (body.companyType !== undefined) {
+        if (!COMPANY_TYPES.includes(body.companyType)) {
+          throw Object.assign(new Error('Invalid company type'), { status: 400 });
+        }
+        updates.companyType = body.companyType;
+      }
+      const finalCompanyType = updates.companyType || current.companyType;
+
+      if (finalCompanyType === 'other') {
+        const otherValue = body.companyTypeOther !== undefined
+          ? String(body.companyTypeOther).trim()
+          : (current.companyTypeOther || '').trim();
+        if (!otherValue) {
+          throw Object.assign(new Error('Please specify the company type'), { status: 400 });
+        }
+        if (otherValue.length > 50) {
+          throw Object.assign(new Error('Company type must be 50 characters or less'), { status: 400 });
+        }
+        updates.companyTypeOther = otherValue;
+      } else if (body.companyType !== undefined || body.companyTypeOther !== undefined) {
+        // Not "Other" anymore, so the custom value must not stay behind
+        updates.companyTypeOther = undefined;
+      }
+
+      // Project type
+      if (body.projectType !== undefined) {
+        if (!PROJECT_TYPES.includes(body.projectType)) {
+          throw Object.assign(new Error('Invalid project type'), { status: 400 });
+        }
+        updates.projectType = body.projectType;
+      }
+
+      // Emails
+      ['mentorEmail', 'hrEmail'].forEach((field) => {
+        if (body[field] !== undefined) {
+          const value = String(body[field]).trim().toLowerCase();
+          if (!EMAIL_REGEX.test(value)) {
+            throw Object.assign(new Error(`Enter a valid email for ${field}`), { status: 400 });
+          }
+          updates[field] = value;
+        }
+      });
+
+      // Mobile numbers
+      ['studentMobileNumber', 'mentorContactNumber'].forEach((field) => {
+        if (body[field] !== undefined) {
+          const value = String(body[field]).replace(/\s+/g, '');
+          if (!MOBILE_REGEX.test(value)) {
+            throw Object.assign(new Error(`${field} must be a valid 10 digit mobile number`), { status: 400 });
+          }
+          updates[field] = value;
+        }
+      });
+
+      // Dates
+      ['startDate', 'endDate'].forEach((field) => {
+        if (body[field] !== undefined) {
+          const d = new Date(body[field]);
+          if (Number.isNaN(d.getTime())) {
+            throw Object.assign(new Error(`Enter a valid ${field}`), { status: 400 });
+          }
+          updates[field] = d;
+        }
+      });
+      const finalStart = updates.startDate || current.startDate;
+      const finalEnd = updates.endDate || current.endDate;
+      if (finalStart && finalEnd && new Date(finalEnd) <= new Date(finalStart)) {
+        throw Object.assign(new Error('End date must be after start date'), { status: 400 });
+      }
+
+      // Stipend
+      if (body.hasStipend !== undefined || body.stipendAmount !== undefined) {
+        const hasStipend = body.hasStipend !== undefined
+          ? (body.hasStipend === 'true' || body.hasStipend === true)
+          : Boolean(current.hasStipend);
+
+        if (hasStipend) {
+          const amount = body.stipendAmount !== undefined ? Number(body.stipendAmount) : Number(current.stipendAmount);
+          if (!amount || amount <= 0) {
+            throw Object.assign(new Error('Enter a valid stipend amount'), { status: 400 });
+          }
+          updates.hasStipend = true;
+          updates.stipendAmount = amount;
+        } else {
+          updates.hasStipend = false;
+          updates.stipendAmount = 0;
+          updates.stipendProof = undefined;
+        }
+      }
+
+      // Newly uploaded documents
+      FILE_FIELDS.forEach((field) => {
+        if (uploadedFiles[field]) updates[field] = uploadedFiles[field];
+      });
+
+      // Apply field by field so untouched data is never overwritten
+      Object.entries(updates).forEach(([key, value]) => {
+        submission.set(`registrationData.${key}`, value);
+      });
 
     } else if (updateType === 'mpr') {
       if (!mprType || !submission.mprSubmissions?.[mprType]) {
@@ -220,6 +389,10 @@ const updateSubmissionDetails = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Update submission error:', error);
+    cleanupTempFiles();
+    if (error.status === 400) {
+      return errorResponse(res, error.message, 400);
+    }
     errorResponse(res, 'Failed to update submission: ' + error.message, 500);
   }
 };

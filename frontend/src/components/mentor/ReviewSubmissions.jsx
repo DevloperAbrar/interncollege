@@ -465,6 +465,327 @@ const FinalReportMarks = ({ marks, setMarks }) => {
 };
 
 // Main Component
+// ─── Registration edit form (mentor side) ────────────────────────────────────
+const COMPANY_TYPE_OPTIONS = [
+  ['startup', 'Startup'],
+  ['mnc', 'MNC'],
+  ['government', 'Government'],
+  ['psu', 'PSU'],
+  ['academic_institute', 'Academic Institute'],
+  ['research', 'Research'],
+  ['other', 'Other']
+]
+
+const WORK_TYPE_OPTIONS = [
+  ['software', 'Software'],
+  ['hardware', 'Hardware'],
+  ['product_development', 'Product Development'],
+  ['software_hardware', 'Software & Hardware'],
+  ['experiment_based', 'Experiment Based'],
+  ['testing_based', 'Testing Based'],
+  ['case_study', 'Case Study'],
+  ['other', 'Other']
+]
+
+const INTERNSHIP_TYPE_OPTIONS = [
+  ['remote', 'Remote'],
+  ['onsite', 'On-site'],
+  ['hybrid', 'Hybrid']
+]
+
+const PROJECT_TYPE_OPTIONS = [
+  ['software', 'Software'],
+  ['hardware', 'Hardware'],
+  ['software_hardware', 'Software & Hardware'],
+  ['experimental', 'Experimental']
+]
+
+const labelFor = (options, value) =>
+  options.find(([v]) => v === value)?.[1] || value || 'N/A'
+
+const toDateInput = (value) => {
+  if (!value) return ''
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+const inputClass =
+  'w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+
+const EditField = ({ label, children, className = '' }) => (
+  <div className={className}>
+    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    {children}
+  </div>
+)
+
+const RegistrationEditForm = ({
+  registration = {},
+  semesterType,
+  editedData,
+  setEditedData,
+  setEditedFiles
+}) => {
+  const isProject = semesterType === '8th_project'
+
+  const value = (key) =>
+    editedData[key] !== undefined ? editedData[key] : (registration[key] ?? '')
+
+  const setField = (key, val) =>
+    setEditedData((prev) => {
+      const next = { ...prev, [key]: val }
+      // Keep the "Other" text in sync with the company type choice
+      if (key === 'companyType' && val !== 'other') {
+        next.companyTypeOther = ''
+      }
+      return next
+    })
+
+  const setFile = (key, file) =>
+    setEditedFiles((prev) => ({ ...prev, [key]: file }))
+
+  const hasStipend =
+    editedData.hasStipend !== undefined
+      ? editedData.hasStipend === 'true' || editedData.hasStipend === true
+      : Boolean(registration.hasStipend)
+
+  const text = (key, extra = {}) => (
+    <input
+      type="text"
+      value={value(key)}
+      onChange={(e) => setField(key, e.target.value)}
+      className={inputClass}
+      {...extra}
+    />
+  )
+
+  const select = (key, options, placeholder = 'Select') => (
+    <select
+      value={value(key)}
+      onChange={(e) => setField(key, e.target.value)}
+      className={inputClass}
+    >
+      <option value="">{placeholder}</option>
+      {options.map(([v, l]) => (
+        <option key={v} value={v}>{l}</option>
+      ))}
+    </select>
+  )
+
+  if (isProject) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white p-4 rounded-lg border border-blue-200">
+          <h5 className="font-semibold text-gray-900 mb-3">Edit Project Information</h5>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <EditField label="Project Title">{text('projectTitle')}</EditField>
+            <EditField label="Project Type">
+              {select('projectType', PROJECT_TYPE_OPTIONS, 'Select type')}
+            </EditField>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-blue-200">
+          <h5 className="font-semibold text-gray-900 mb-3">📎 Replace Documents (Optional)</h5>
+          <FileUpload
+            onFileSelect={(file) => setFile('projectReport', file)}
+            accept=".pdf"
+            allowedTypes={['pdf']}
+            maxSize={2 * 1024 * 1024}
+            label="Upload New Project Report"
+          />
+          {registration.projectReport && (
+            <div className="mt-2 text-sm text-gray-600">
+              Current: <DocumentLink url={registration.projectReport} label="View Current" />
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Company */}
+      <div className="bg-white p-4 rounded-lg border border-blue-200">
+        <h5 className="font-semibold text-gray-900 mb-3">Edit Company Information</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <EditField label="Company Name">{text('companyName', { maxLength: 100 })}</EditField>
+          <EditField label="Company Type">
+            {select('companyType', COMPANY_TYPE_OPTIONS, 'Select type')}
+          </EditField>
+
+          {value('companyType') === 'other' && (
+            <EditField label="Specify Company Type" className="md:col-span-2">
+              {text('companyTypeOther', {
+                maxLength: 50,
+                placeholder: 'e.g., NGO, Consulting Firm, Healthcare'
+              })}
+            </EditField>
+          )}
+
+          <EditField label="Company Full Address" className="md:col-span-2">
+            <textarea
+              rows={3}
+              maxLength={300}
+              value={value('companyFullAddress')}
+              onChange={(e) => setField('companyFullAddress', e.target.value)}
+              className={inputClass}
+            />
+          </EditField>
+        </div>
+      </div>
+
+      {/* Internship */}
+      <div className="bg-white p-4 rounded-lg border border-blue-200">
+        <h5 className="font-semibold text-gray-900 mb-3">Edit Internship Details</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <EditField label="Internship Title">{text('internshipTitle', { maxLength: 100 })}</EditField>
+          <EditField label="Internship Domain">{text('internshipDomain', { maxLength: 100 })}</EditField>
+          <EditField label="Internship Type">
+            {select('internshipType', INTERNSHIP_TYPE_OPTIONS, 'Select type')}
+          </EditField>
+          <EditField label="Type of Work">
+            {select('typeOfWork', WORK_TYPE_OPTIONS, 'Select work type')}
+          </EditField>
+          <EditField label="Start Date">
+            <input
+              type="date"
+              value={editedData.startDate !== undefined ? editedData.startDate : toDateInput(registration.startDate)}
+              onChange={(e) => setField('startDate', e.target.value)}
+              className={inputClass}
+            />
+          </EditField>
+          <EditField label="End Date">
+            <input
+              type="date"
+              value={editedData.endDate !== undefined ? editedData.endDate : toDateInput(registration.endDate)}
+              onChange={(e) => setField('endDate', e.target.value)}
+              className={inputClass}
+            />
+          </EditField>
+        </div>
+      </div>
+
+      {/* Stipend */}
+      <div className="bg-white p-4 rounded-lg border border-blue-200">
+        <h5 className="font-semibold text-gray-900 mb-3">Edit Stipend Information</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <EditField label="Has Stipend">
+            <select
+              value={hasStipend ? 'true' : 'false'}
+              onChange={(e) => setField('hasStipend', e.target.value)}
+              className={inputClass}
+            >
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </EditField>
+
+          {hasStipend && (
+            <>
+              <EditField label="Stipend Amount (₹ per month)">
+                <input
+                  type="number"
+                  min="1"
+                  value={value('stipendAmount')}
+                  onChange={(e) => setField('stipendAmount', e.target.value)}
+                  className={inputClass}
+                />
+              </EditField>
+              <div className="md:col-span-2">
+                <FileUpload
+                  onFileSelect={(file) => setFile('stipendProof', file)}
+                  accept=".pdf"
+                  allowedTypes={['pdf']}
+                  maxSize={2 * 1024 * 1024}
+                  label="Replace Stipend Proof (PDF)"
+                />
+                {registration.stipendProof && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    Current: <DocumentLink url={registration.stipendProof} label="View Current" />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Contacts */}
+      <div className="bg-white p-4 rounded-lg border border-blue-200">
+        <h5 className="font-semibold text-gray-900 mb-3">Edit Contact Information</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <EditField label="Student Mobile">
+            {text('studentMobileNumber', { maxLength: 10, inputMode: 'numeric' })}
+          </EditField>
+          <EditField label="Industry Mentor Name">{text('mentorName')}</EditField>
+          <EditField label="Mentor Role">{text('mentorRole', { maxLength: 100 })}</EditField>
+          <EditField label="Mentor Contact">
+            {text('mentorContactNumber', { maxLength: 10, inputMode: 'numeric' })}
+          </EditField>
+          <EditField label="Mentor Email">{text('mentorEmail', { type: 'email' })}</EditField>
+          <EditField label="HR Name">{text('hrName')}</EditField>
+          <EditField label="HR Email">{text('hrEmail', { type: 'email' })}</EditField>
+        </div>
+      </div>
+
+      {/* Documents */}
+      <div className="bg-white p-4 rounded-lg border border-blue-200">
+        <h5 className="font-semibold text-gray-900 mb-1">📎 Replace Documents (Optional)</h5>
+        <p className="text-xs text-gray-500 mb-3">
+          Offer letter and NOC must be PDF. Synopsis can be PDF, PPT or PPTX. Max 2 MB each.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <FileUpload
+              onFileSelect={(file) => setFile('offerLetter', file)}
+              accept=".pdf"
+              allowedTypes={['pdf']}
+              maxSize={2 * 1024 * 1024}
+              label="Replace Offer Letter"
+            />
+            {registration.offerLetter && (
+              <div className="mt-2 text-sm text-gray-600">
+                Current: <DocumentLink url={registration.offerLetter} label="View Current" />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <FileUpload
+              onFileSelect={(file) => setFile('nocLetter', file)}
+              accept=".pdf"
+              allowedTypes={['pdf']}
+              maxSize={2 * 1024 * 1024}
+              label="Replace NOC Letter"
+            />
+            {registration.nocLetter && (
+              <div className="mt-2 text-sm text-gray-600">
+                Current: <DocumentLink url={registration.nocLetter} label="View Current" />
+              </div>
+            )}
+          </div>
+
+          <div className="md:col-span-2">
+            <FileUpload
+              onFileSelect={(file) => setFile('synopsisPPT', file)}
+              accept=".pdf,.ppt,.pptx"
+              allowedTypes={['pdf', 'ppt', 'pptx']}
+              maxSize={2 * 1024 * 1024}
+              label="Replace Internship Synopsis (PDF / PPT)"
+            />
+            {registration.synopsisPPT && (
+              <div className="mt-2 text-sm text-gray-600">
+                Current: <DocumentLink url={registration.synopsisPPT} label="View Current" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 const ReviewSubmissions = () => {
   const { execute, loading } = useApi()
   const [pendingSubmissions, setPendingSubmissions] = useState([])
@@ -568,7 +889,14 @@ const ReviewSubmissions = () => {
   }
 
   const handleSaveEdits = async () => {
-    if (!selectedSubmission || savingEdits) return   // ✅ ignore extra clicks while a save is in flight
+    if (!selectedSubmission || savingEdits) return
+
+    const hasTextChanges = Object.keys(editedData).length > 0
+    const hasFileChanges = Object.values(editedFiles).some(Boolean)
+    if (!hasTextChanges && !hasFileChanges) {
+      alert('No changes to save')
+      return
+    }
 
     setSavingEdits(true)
     try {
@@ -584,7 +912,7 @@ const ReviewSubmissions = () => {
       formData.append('updateType', updateType)
 
       Object.entries(editedData).forEach(([key, value]) => {
-        formData.append(key, value)
+        formData.append(key, value === null || value === undefined ? '' : value)
       })
 
       Object.entries(editedFiles).forEach(([key, file]) => {
@@ -602,13 +930,13 @@ const ReviewSubmissions = () => {
         setEditMode(false)
         setEditedData({})
         setEditedFiles({})
-        await handleViewDetails(selectedSubmission._id)   // await so spinner stays until reload finishes
+        await handleViewDetails(selectedSubmission._id)
       }
     } catch (error) {
       console.error('Error saving edits:', error)
-      alert('Failed to save edits: ' + error.message)
+      alert('Failed to save edits: ' + (error.response?.data?.message || error.message))
     } finally {
-      setSavingEdits(false)   // ✅ always release the lock, success or failure
+      setSavingEdits(false)
     }
   }
 
@@ -955,8 +1283,8 @@ const ReviewSubmissions = () => {
                       className={`px-4 py-2 rounded-md flex items-center ${savingEdits
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : editMode
-                        ? 'bg-gray-200 text-gray-700'
-                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                          ? 'bg-gray-200 text-gray-700'
+                          : 'bg-blue-500 text-white hover:bg-blue-600'
                         }`}
                     >
                       {editMode ? (
@@ -1052,8 +1380,8 @@ const ReviewSubmissions = () => {
                             onClick={handleSaveEdits}
                             disabled={savingEdits}
                             className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
-                                ? 'bg-green-300 text-white cursor-not-allowed'
-                                : 'bg-green-500 text-white hover:bg-green-600'
+                              ? 'bg-green-300 text-white cursor-not-allowed'
+                              : 'bg-green-500 text-white hover:bg-green-600'
                               }`}
                           >
                             {savingEdits ? (
@@ -1086,7 +1414,12 @@ const ReviewSubmissions = () => {
                                   </div>
                                   <div>
                                     <strong className="text-gray-700">Company Type:</strong>
-                                    <div className="text-gray-900 capitalize">{selectedSubmission.registrationData?.companyType || 'N/A'}</div>
+                                    <div className="text-gray-900">
+                                      {selectedSubmission.registrationData?.companyType === 'other' &&
+                                        selectedSubmission.registrationData?.companyTypeOther
+                                        ? `Other (${selectedSubmission.registrationData.companyTypeOther})`
+                                        : labelFor(COMPANY_TYPE_OPTIONS, selectedSubmission.registrationData?.companyType)}
+                                    </div>
                                   </div>
                                   <div className="md:col-span-2">
                                     <strong className="text-gray-700">Full Address:</strong>
@@ -1227,6 +1560,16 @@ const ReviewSubmissions = () => {
                                       />
                                     </div>
                                   </div>
+                                  <div>
+                                    <strong className="text-gray-700">Internship Synopsis:</strong>
+                                    <div className="mt-1">
+                                      <DocumentLink
+                                        url={selectedSubmission.registrationData?.synopsisPPT}
+                                        label="View Synopsis"
+                                        icon={FileText}
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </>
@@ -1266,74 +1609,13 @@ const ReviewSubmissions = () => {
                           )}
                         </div>
                       ) : (
-                        /* Edit Mode for Registration */
-                        <div className="space-y-4">
-                          {/* Add edit fields here - similar structure to display mode but with input fields */}
-                          <div className="bg-white p-4 rounded-lg border border-blue-200">
-                            <h5 className="font-semibold text-gray-900 mb-3">Edit Company Information</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-                                <input
-                                  type="text"
-                                  defaultValue={selectedSubmission.registrationData?.companyName}
-                                  onChange={(e) => setEditedData({ ...editedData, companyName: e.target.value })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                              </div>
-                              {/* Add more editable fields as needed */}
-                            </div>
-                          </div>
-
-                          {/* Document replacement section */}
-                          <div className="bg-white p-4 rounded-lg border border-blue-200">
-                            <h5 className="font-semibold text-gray-900 mb-3">📎 Replace Documents (Optional)</h5>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Replace Offer Letter</label>
-                                <FileUpload
-                                  onFileSelect={(file) => setEditedFiles({ ...editedFiles, offerLetter: file })}
-                                  accept=".pdf"
-                                  allowedTypes={['pdf']}
-                                  label="Upload New Offer Letter"
-                                />
-                                {selectedSubmission.registrationData?.offerLetter && (
-                                  <div className="mt-2 text-sm text-gray-600">
-                                    Current: <DocumentLink url={selectedSubmission.registrationData.offerLetter} label="View Current" />
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Replace NOC Letter</label>
-                                <FileUpload
-                                  onFileSelect={(file) => setEditedFiles({ ...editedFiles, nocLetter: file })}
-                                  accept=".pdf"
-                                  allowedTypes={['pdf']}
-                                  label="Upload New NOC Letter"
-                                />
-                                {selectedSubmission.registrationData?.nocLetter && (
-                                  <div className="mt-2 text-sm text-gray-600">
-                                    Current: <DocumentLink url={selectedSubmission.registrationData.nocLetter} label="View Current" />
-                                  </div>
-                                )}
-                              </div>
-                              {selectedSubmission.registrationData?.hasStipend && selectedSubmission.registrationData?.stipendProof && (
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">Replace Stipend Proof</label>
-                                  <FileUpload
-                                    onFileSelect={(file) => setEditedFiles({ ...editedFiles, stipendProof: file })}
-                                    accept=".pdf"
-                                    allowedTypes={['pdf']}
-                                    label="Upload New Stipend Proof"
-                                  />
-                                  <div className="mt-2 text-sm text-gray-600">
-                                    Current: <DocumentLink url={selectedSubmission.registrationData.stipendProof} label="View Current" />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                        <RegistrationEditForm
+                          registration={selectedSubmission.registrationData}
+                          semesterType={selectedSubmission.semesterType}
+                          editedData={editedData}
+                          setEditedData={setEditedData}
+                          setEditedFiles={setEditedFiles}
+                        />
                       )}
                     </div>
                   )}
@@ -1351,8 +1633,8 @@ const ReviewSubmissions = () => {
                             onClick={handleSaveEdits}
                             disabled={savingEdits}
                             className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
-                                ? 'bg-green-300 text-white cursor-not-allowed'
-                                : 'bg-green-500 text-white hover:bg-green-600'
+                              ? 'bg-green-300 text-white cursor-not-allowed'
+                              : 'bg-green-500 text-white hover:bg-green-600'
                               }`}
                           >
                             {savingEdits ? (
@@ -1468,8 +1750,8 @@ const ReviewSubmissions = () => {
                             onClick={handleSaveEdits}
                             disabled={savingEdits}
                             className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
-                                ? 'bg-green-300 text-white cursor-not-allowed'
-                                : 'bg-green-500 text-white hover:bg-green-600'
+                              ? 'bg-green-300 text-white cursor-not-allowed'
+                              : 'bg-green-500 text-white hover:bg-green-600'
                               }`}
                           >
                             {savingEdits ? (
@@ -1931,7 +2213,7 @@ const ReviewSubmissions = () => {
                   Last updated: {selectedSubmission ? formatDateTime(selectedSubmission.updatedAt) : 'N/A'}
                 </div>
                 <div className="flex space-x-3">
-                <button
+                  <button
                     onClick={resetModal}
                     disabled={savingEdits}
                     className={`px-6 py-2 text-sm font-medium border border-gray-300 rounded-lg transition-colors ${savingEdits

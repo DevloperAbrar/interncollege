@@ -18,7 +18,7 @@ const {
   getSubmissionHistory,
   sendMonthlyReminder,
   reviewMPR,
-  updateSubmissionDetails   // ADD THIS
+  updateSubmissionDetails
 } = require('../controllers/mentorController');
 
 // Apply auth and mentor role check to all routes
@@ -52,7 +52,7 @@ router.put('/submissions/:id/review', [
   checkValidationResult
 ], reviewSubmission);
 
-// NEW: MPR-specific review route
+// MPR-specific review route
 router.put('/mpr/:mprId/review', [
   body('action')
     .isIn(['approve', 'reject'])
@@ -99,6 +99,7 @@ router.put('/submissions/:id',
     { name: 'stipendProof', maxCount: 1 },
     { name: 'offerLetter', maxCount: 1 },
     { name: 'nocLetter', maxCount: 1 },
+    { name: 'synopsisPPT', maxCount: 1 },
     { name: 'projectReport', maxCount: 1 },
     { name: 'document', maxCount: 1 },
     { name: 'finalPPT', maxCount: 1 },

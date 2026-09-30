@@ -732,369 +732,269 @@ class ExcelService {
     }
   }
 
+    // ============================================================================
+  // SHARED HELPERS for "Student Progress & Marks" export (mentor + admin)
+  // ============================================================================
+
+  // "software_hardware" -> "Software & Hardware", "startup" -> "Startup"
+  prettify(value) {
+    if (value === undefined || value === null || value === '') return '';
+    const map = {
+      mnc: 'MNC',
+      psu: 'PSU',
+      onsite: 'On-site',
+      software_hardware: 'Software & Hardware',
+      off_campus: 'Off Campus'
+    };
+    const key = String(value);
+    if (map[key]) return map[key];
+    return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  // First non-empty document link from the given paths (always absolute URL)
+  docUrl(submission, ...paths) {
+    for (const p of paths) {
+      const v = this.getDocumentURL(submission, p);
+      if (v && typeof v === 'string') return this.toAbsoluteUrl(v);
+    }
+    return '';
+  }
+
+  toNum(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // An MPR entry has a default status of "pending" even when nothing was uploaded,
+  // so only treat it as submitted when a document / submit date exists.
+  mprStatus(entry) {
+    if (!entry || !(entry.document || entry.submittedAt)) return 'Not Submitted';
+    return this.prettify(entry.status) || 'Pending';
+  }
+
+  sortSubmissionsByEnrollment(submissions) {
+    return submissions.sort((a, b) => {
+      const ea = a.student?.enrollmentNo || '';
+      const eb = b.student?.enrollmentNo || '';
+      if (ea !== eb) return ea.localeCompare(eb);
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+  }
+
+  // One row per submission. Every row has the SAME columns in the SAME order.
+  buildProgressRow(submission, mentor = {}, includeDepartment = false) {
+    const student = submission.student || {};
+    const reg = submission.registrationData || {};
+    const fr = submission.finalReport || {};
+    const regReview = submission.registrationReview || {};
+    const finalReview = submission.finalReportReview || {};
+    const mprs = submission.mprSubmissions || {};
+    const regMarks = regReview.marks || {};
+    const finalMarks = finalReview.marks || {};
+
+    const isProject = submission.semesterType === '8th_project';
+    const hasMprFlow = ['7th_internship', '8th_internship', '8th_project'].includes(submission.semesterType);
+
+    const mid = mprs.midSem1 || {};
+    const midMarks = mid.marks && typeof mid.marks === 'object' ? mid.marks : {};
+
+    const companyType =
+      reg.companyType === 'other' && reg.companyTypeOther
+        ? `Other (${reg.companyTypeOther})`
+        : this.prettify(reg.companyType);
+
+    const mprKeys = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
+    const approvedCount = mprKeys.filter(
+      (k) => this.mprStatus(mprs[k]) === 'Approved'
+    ).length;
+
+    const simpleMpr = (key) => (hasMprFlow ? this.toNum(mprs[key]?.marks) : '');
+
+    const row = {
+      // ===== STUDENT =====
+      'Student Name': student.name || submission.studentName || '',
+      'Enrollment No': student.enrollmentNo || submission.enrollmentNo || '',
+      'Branch': student.branch || submission.branch || '',
+      'Email': student.email || submission.email || '',
+      'Student Mobile Number': reg.studentMobileNumber || student.phone || '',
+
+      // ===== FACULTY =====
+      'Assigned Faculty': mentor?.name || '',
+      'Faculty Email': mentor?.email || '',
+      ...(includeDepartment ? { 'Department': mentor?.department || '' } : {}),
+
+      // ===== STATUS =====
+      'Semester Type': (submission.semesterType || '').replace(/_/g, ' ').toUpperCase(),
+      'Current Status': this.prettify(submission.currentStep),
+      'Overall Progress': this.prettify(submission.status),
+      'Submitted On': this.formatDate(submission.createdAt, 'DD/MM/YYYY'),
+
+      // ===== COMPANY / INTERNSHIP =====
+      'Company Name': reg.companyName || '',
+      'Company Type': companyType,
+      'Company Full Address': reg.companyFullAddress || '',
+      'Internship Title': reg.internshipTitle || '',
+      'Internship Type': this.prettify(reg.internshipType),
+      'Type of Work': this.prettify(reg.typeOfWork),
+      'Internship Domain': reg.internshipDomain || '',
+      'Duration (Months)': reg.duration || '',
+      'Start Date': this.formatDate(reg.startDate, 'DD/MM/YYYY'),
+      'End Date': this.formatDate(reg.endDate, 'DD/MM/YYYY'),
+      'Has Stipend': isProject ? '' : (reg.hasStipend ? 'Yes' : 'No'),
+      'Stipend Amount (₹/month)': isProject ? '' : (reg.hasStipend ? this.toNum(reg.stipendAmount) : 0),
+
+      // ===== INDUSTRY MENTOR / HR =====
+      'Industry Mentor Name': reg.mentorName || '',
+      'Industry Mentor Role': reg.mentorRole || '',
+      'Industry Mentor Contact Number': reg.mentorContactNumber || '',
+      'Industry Mentor Email': reg.mentorEmail || '',
+      'HR Name': reg.hrName || '',
+      'HR Email': reg.hrEmail || '',
+
+      // ===== PROJECT (8th semester project) =====
+      'Project Title': reg.projectTitle || '',
+      'Project Type': this.prettify(reg.projectType),
+
+      // ===== REGISTRATION MARKS =====
+      'Registration - Objective/Problem (5)': this.toNum(regMarks.objectiveProblemIdentification),
+      'Registration - Methodology (5)': this.toNum(regMarks.proposedMethodology),
+      'Registration - Relevance (5)': this.toNum(regMarks.relevanceRealWorld),
+      'Registration - Synopsis (5)': this.toNum(regMarks.synopsisPresentation),
+      'Registration Total Marks (20)': this.toNum(regMarks.totalRegistrationMarks),
+      'Registration Status': this.prettify(regReview.status) || 'Not Started',
+      'Registration Reviewed On': this.formatDate(regReview.reviewedAt, 'DD/MM/YYYY'),
+
+      // ===== MPR + MID SEM MARKS (7th / 8th internship and 8th project) =====
+      'MPR1 Marks (10)': simpleMpr('mpr1'),
+      'MPR1 Status': hasMprFlow ? this.mprStatus(mprs.mpr1) : '',
+      'MPR2 Marks (10)': simpleMpr('mpr2'),
+      'MPR2 Status': hasMprFlow ? this.mprStatus(mprs.mpr2) : '',
+      'MPR3 Marks (10)': simpleMpr('mpr3'),
+      'MPR3 Status': hasMprFlow ? this.mprStatus(mprs.mpr3) : '',
+
+      'MidSem1 - Daily Diary (10)': hasMprFlow ? this.toNum(midMarks.dailyDiary) : '',
+      'MidSem1 - Outcomes (20)': hasMprFlow ? this.toNum(midMarks.expectedAchievedOutcomes) : '',
+      'MidSem1 - Report (30)': hasMprFlow ? this.toNum(midMarks.briefReport) : '',
+      'MidSem1 - Presentation (40)': hasMprFlow ? this.toNum(midMarks.presentationViva) : '',
+      'MidSem1 Total (100)': hasMprFlow ? this.toNum(midMarks.total) : '',
+      'MidSem1 Status': hasMprFlow ? this.mprStatus(mid) : '',
+      'MPRs Approved (out of 4)': hasMprFlow ? `${approvedCount}/4` : '',
+
+      // ===== FINAL REPORT MARKS =====
+      'Final - Daily Diary (20)': this.toNum(finalMarks.dailyDiary),
+      'Final - Project Outcomes (30)': this.toNum(finalMarks.projectOutcomes),
+      'Final - Objective & Literature (20)': this.toNum(finalMarks.objectiveLiteratureReview),
+      'Final - Methodology (20)': this.toNum(finalMarks.methodologyArea),
+      'Final - Work Description (20)': this.toNum(finalMarks.workDescription),
+      'Final - Results & Discussion (20)': this.toNum(finalMarks.dataResultDiscussion),
+      'Final - Format & Plagiarism (20)': this.toNum(finalMarks.overallFormatPlagiarism),
+      'Final Report Marks (100)': this.toNum(finalMarks.totalReportMarks),
+      'Final - Define Objective (20)': this.toNum(finalMarks.defineObjective),
+      'Final - Content (20)': this.toNum(finalMarks.contentPresentation),
+      'Final - Presentation Skill (20)': this.toNum(finalMarks.presentationSkill),
+      'Final - Relevance (20)': this.toNum(finalMarks.socialIndustrialRelevance),
+      'Final - Q&A (20)': this.toNum(finalMarks.questionAnswer),
+      'Final Presentation Marks (100)': this.toNum(finalMarks.totalPresentationMarks),
+      'FINAL GRAND TOTAL (250)': this.toNum(finalMarks.grandTotal),
+      'Final Report Status': this.prettify(finalReview.status) || 'Not Started',
+      'Final Report Reviewed On': this.formatDate(finalReview.reviewedAt, 'DD/MM/YYYY'),
+
+      // ===== REGISTRATION DOCUMENTS =====
+      'Offer Letter': this.docUrl(submission, 'registrationData.offerLetter'),
+      'NOC Letter': this.docUrl(submission, 'registrationData.nocLetter'),
+      'Stipend Proof': this.docUrl(submission, 'registrationData.stipendProof'),
+      'Internship Synopsis (PDF/PPT)': this.docUrl(submission, 'registrationData.synopsisPPT'),
+      'Project Report (Registration)': this.docUrl(submission, 'registrationData.projectReport'),
+
+      // ===== MPR DOCUMENTS =====
+      'MPR1 Document': hasMprFlow ? this.docUrl(submission, 'mprSubmissions.mpr1.document') : '',
+      'MPR2 Document': hasMprFlow ? this.docUrl(submission, 'mprSubmissions.mpr2.document') : '',
+      'MPR3 Document': hasMprFlow ? this.docUrl(submission, 'mprSubmissions.mpr3.document') : '',
+      'MidSem1 Document': hasMprFlow ? this.docUrl(submission, 'mprSubmissions.midSem1.document') : '',
+
+      // ===== FINAL REPORT DOCUMENTS =====
+      'Final Report Document': this.docUrl(submission, 'finalReport.finalReport', 'finalReport.finalProjectReport'),
+      'Final PPT': this.docUrl(submission, 'finalReport.finalPPT'),
+      'Completion Certificate': this.docUrl(submission, 'finalReport.certificate'),
+      'Final MPR': this.docUrl(submission, 'finalReport.finalMPR'),
+
+      // ===== 8th PROJECT: RESEARCH PAPER / CONFERENCE =====
+      'Research Paper Status': isProject ? this.prettify(fr.researchPaperStatus) : '',
+      'Conference Link': isProject ? (fr.conferenceLink || '') : '',
+      'Conference Payment Proof': isProject ? this.docUrl(submission, 'finalReport.conferencePaymentProof') : '',
+      'Conference Certificate': isProject ? this.docUrl(submission, 'finalReport.conferenceCertificate') : '',
+      'Published Paper Copy': isProject ? this.docUrl(submission, 'finalReport.publishedPaperCopy') : '',
+
+      // ===== PPO / PLACEMENT =====
+      'PPO / Placement Received': (fr.hasPPO || fr.hasPlacement) ? 'Yes' : 'No',
+      'Placement From': fr.hasPlacement ? this.prettify(fr.placementFrom) : '',
+      'PPO Amount (LPA)': fr.hasPPO ? (fr.ppoAmount || '') : '',
+      'PPO / Placement Offer Letter': this.docUrl(submission, 'finalReport.ppoOfferLetter', 'finalReport.ppoOfferLetterProject'),
+
+      // ===== FEEDBACK =====
+      'Registration Feedback': regReview.feedback || '',
+      'Final Report Feedback': finalReview.feedback || ''
+    };
+
+    return row;
+  }
+
+  // Builds the xlsx buffer with auto-sized columns
+  buildProgressWorkbook(rows, sheetName) {
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+
+    if (rows.length > 0) {
+      worksheet['!cols'] = Object.keys(rows[0]).map((key) => {
+        const maxLen = Math.max(
+          key.length,
+          ...rows.slice(0, 100).map((r) => String(r[key] ?? '').length)
+        );
+        return { width: Math.min(Math.max(maxLen + 3, 12), 60) };
+      });
+    }
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  }
+
   // ============================================================================
   // CORRECTED exportMentorStudentData METHOD
   // ============================================================================
 
   async exportMentorStudentData(mentorId) {
     try {
-      console.log(`Starting streamlined mentor export for mentor: ${mentorId}`);
+      console.log(`Starting mentor export for mentor: ${mentorId}`);
 
-      // Get mentor's assigned students
       const students = await User.find({
         role: 'student',
         assignedMentor: mentorId
-      }).lean();
+      }).select('_id').lean();
 
-      const studentIds = students.map(s => s._id);
+      const studentIds = students.map((s) => s._id);
 
-      // Get ALL submissions for these students (not just active ones)
-      const submissions = await Submission.find({
-        student: { $in: studentIds }
-      })
+      const submissions = await Submission.find({ student: { $in: studentIds } })
         .populate('student', 'name enrollmentNo email branch phone')
-        .populate('registrationReview.reviewedBy', 'name')
-        .populate('finalReportReview.reviewedBy', 'name')
-        .sort({ 'student.enrollmentNo': 1, createdAt: 1 })
         .lean();
 
-      // Get mentor info
-      const mentor = await User.findById(mentorId).select('name email');
+      const mentor = await User.findById(mentorId).select('name email').lean();
 
-      console.log(`Processing ${submissions.length} submissions for ${students.length} students`);
+      const rows = this.sortSubmissionsByEnrollment(
+        submissions.filter((s) => s.student)
+      ).map((submission) => this.buildProgressRow(submission, mentor));
 
-      // Process each SUBMISSION as a separate row
-      const excelData = submissions.map(submission => {
-        const student = students.find(s => s._id.toString() === submission.student._id.toString());
+      const buffer = this.buildProgressWorkbook(rows, 'Student Progress & Marks');
 
-        const baseData = {
-          // ===== BASIC STUDENT INFO =====
-          'Student Name': submission.student?.name || student?.name || '',
-          'Enrollment No': submission.student?.enrollmentNo || student?.enrollmentNo || '',
-          'Branch': submission.student?.branch || student?.branch || '',
-          'Email': submission.student?.email || student?.email || '',
-          'Phone': submission.student?.phone || student?.phone || '',
-
-          // ===== FACULTY ASSIGNMENT =====
-          'Assigned Faculty': mentor?.name || '',
-          'Faculty Email': mentor?.email || '',
-
-          // ===== SUBMISSION STATUS =====
-          'Semester Type': (submission.semesterType || '').replace('_', ' ').toUpperCase(),
-          'Current Status': submission.currentStep || '',
-          'Overall Progress': submission.status || '',
-          'Submitted On': this.formatDate(submission.createdAt, 'DD/MM/YYYY'),
-        };
-
-        // ===== COMPLETE COMPANY/PROJECT DETAILS =====
-        if (submission.registrationData) {
-          Object.assign(baseData, {
-            // Company Info
-            'Company/Organization': submission.registrationData.companyName || submission.registrationData.projectTitle || '',
-            'Company Type': submission.registrationData.companyType || '',
-            'Company Full Address': submission.registrationData.companyFullAddress || submission.registrationData.companyAddress || '',
-
-            // Internship Details
-            'Internship/Project Title': submission.registrationData.internshipTitle || submission.registrationData.projectTitle || '',
-            'Internship Type': submission.registrationData.internshipType || '',
-            'Type of Work': submission.registrationData.typeOfWork || '',
-            'Internship Domain': submission.registrationData.internshipDomain || '',
-
-            // Duration
-            'Duration (Months)': submission.registrationData.duration || '',
-            'Start Date': this.formatDate(submission.registrationData.startDate, 'DD/MM/YYYY'),
-            'End Date': this.formatDate(submission.registrationData.endDate, 'DD/MM/YYYY'),
-
-            // Stipend
-            'Has Stipend': submission.registrationData.hasStipend ? 'Yes' : 'No',
-            'Stipend Amount (₹/month)': submission.registrationData.stipendAmount || submission.registrationData.stipendPerMonth || '0',
-
-            // Student Contact
-            'Student Mobile Number': submission.registrationData.studentMobileNumber || '',
-
-            // Industry Mentor Details
-            'Industry Mentor Name': submission.registrationData.mentorName || '',
-            'Industry Mentor Role': submission.registrationData.mentorRole || '',
-            'Industry Mentor Contact Number': submission.registrationData.mentorContactNumber || '',
-            'Industry Mentor Email': submission.registrationData.mentorEmail || '',
-
-            // HR Details
-            'HR Name': submission.registrationData.hrName || '',
-            'HR Email': submission.registrationData.hrEmail || '',
-
-            // Project Type (for 8th semester projects)
-            'Project Type': submission.registrationData.projectType || '',
-          });
-        } else {
-          // Add empty fields if no registration data
-          Object.assign(baseData, {
-            'Company/Organization': '',
-            'Company Type': '',
-            'Company Full Address': '',
-            'Internship/Project Title': '',
-            'Internship Type': '',
-            'Type of Work': '',
-            'Internship Domain': '',
-            'Duration (Months)': '',
-            'Start Date': '',
-            'End Date': '',
-            'Has Stipend': '',
-            'Stipend Amount (₹/month)': '',
-            'Student Mobile Number': '',
-            'Industry Mentor Name': '',
-            'Industry Mentor Role': '',
-            'Industry Mentor Contact Number': '',
-            'Industry Mentor Email': '',
-            'HR Name': '',
-            'HR Email': '',
-            'Project Type': '',
-          });
-        }
-
-        // ===== REGISTRATION MARKS =====
-        if (submission.registrationReview && submission.registrationReview.marks) {
-          const regMarks = submission.registrationReview.marks;
-
-          Object.assign(baseData, {
-            'Registration - Objective/Problem (5)': Number(regMarks.objectiveProblemIdentification) || 0,
-            'Registration - Methodology (5)': Number(regMarks.proposedMethodology) || 0,
-            'Registration - Relevance (5)': Number(regMarks.relevanceRealWorld) || 0,
-            'Registration - Synopsis (5)': Number(regMarks.synopsisPresentation) || 0,
-            'Registration Total Marks (20)': Number(regMarks.totalRegistrationMarks) || 0,
-            'Registration Status': submission.registrationReview.status || '',
-            'Registration Reviewed On': this.formatDate(submission.registrationReview.reviewedAt, 'DD/MM/YYYY'),
-          });
-        } else {
-          Object.assign(baseData, {
-            'Registration - Objective/Problem (5)': 0,
-            'Registration - Methodology (5)': 0,
-            'Registration - Relevance (5)': 0,
-            'Registration - Synopsis (5)': 0,
-            'Registration Total Marks (20)': 0,
-            'Registration Status': submission.registrationReview?.status || 'Not Started',
-            'Registration Reviewed On': '',
-          });
-        }
-
-        // ===== MPR MARKS (for 7th & 8th internships) =====
-        if (['7th_internship', '8th_internship'].includes(submission.semesterType)) {
-          if (submission.mprSubmissions) {
-            // MPR1, MPR2, MPR3 (10 marks each)
-            ['mpr1', 'mpr2', 'mpr3'].forEach(mprType => {
-              const mpr = submission.mprSubmissions[mprType];
-              if (mpr) {
-                const marks = typeof mpr.marks === 'number' ? mpr.marks : 0;
-                baseData[`${mprType.toUpperCase()} Marks (10)`] = Number(marks) || 0;
-                baseData[`${mprType.toUpperCase()} Status`] = mpr.status || 'Not Submitted';
-              } else {
-                baseData[`${mprType.toUpperCase()} Marks (10)`] = 0;
-                baseData[`${mprType.toUpperCase()} Status`] = 'Not Submitted';
-              }
-            });
-
-            // Mid Sem 1 (100 marks)
-            if (submission.mprSubmissions.midSem1 && submission.mprSubmissions.midSem1.marks) {
-              const mid1 = submission.mprSubmissions.midSem1.marks;
-
-              Object.assign(baseData, {
-                'MidSem1 - Daily Diary (10)': Number(mid1.dailyDiary) || 0,
-                'MidSem1 - Outcomes (10)': Number(mid1.expectedAchievedOutcomes) || 0,
-                'MidSem1 - Report (30)': Number(mid1.briefReport) || 0,
-                'MidSem1 - Presentation (50)': Number(mid1.presentationViva) || 0,
-                'MidSem1 Total (100)': Number(mid1.total) || 0,
-                'MidSem1 Status': submission.mprSubmissions.midSem1.status || 'Not Submitted',
-              });
-            } else {
-              Object.assign(baseData, {
-                'MidSem1 - Daily Diary (10)': 0,
-                'MidSem1 - Outcomes (10)': 0,
-                'MidSem1 - Report (30)': 0,
-                'MidSem1 - Presentation (50)': 0,
-                'MidSem1 Total (100)': 0,
-                'MidSem1 Status': submission.mprSubmissions.midSem1?.status || 'Not Submitted',
-              });
-            }
-
-            // Mid Sem 2 (100 marks)
-            if (submission.mprSubmissions.midSem2 && submission.mprSubmissions.midSem2.marks) {
-              const mid2 = submission.mprSubmissions.midSem2.marks;
-
-              Object.assign(baseData, {
-                'MidSem2 - Daily Diary (10)': Number(mid2.dailyDiary) || 0,
-                'MidSem2 - Outcomes (10)': Number(mid2.expectedAchievedOutcomes) || 0,
-                'MidSem2 - Report (30)': Number(mid2.briefReport) || 0,
-                'MidSem2 - Presentation (50)': Number(mid2.presentationViva) || 0,
-                'MidSem2 Total (100)': Number(mid2.total) || 0,
-                'MidSem2 Status': submission.mprSubmissions.midSem2.status || 'Not Submitted',
-              });
-            } else {
-              Object.assign(baseData, {
-                'MidSem2 - Daily Diary (10)': 0,
-                'MidSem2 - Outcomes (10)': 0,
-                'MidSem2 - Report (30)': 0,
-                'MidSem2 - Presentation (50)': 0,
-                'MidSem2 Total (100)': 0,
-                'MidSem2 Status': submission.mprSubmissions.midSem2?.status || 'Not Submitted',
-              });
-            }
-
-            // Overall MPR Progress
-            const mprTypes = ['mpr1', 'mpr2', 'mpr3', 'midSem1', 'midSem2'];
-            const approvedCount = mprTypes.filter(type =>
-              submission.mprSubmissions[type]?.status === 'approved'
-            ).length;
-            baseData['MPRs Approved (out of 5)'] = `${approvedCount}/5`;
-          }
-        }
-
-        // ===== FINAL REPORT MARKS =====
-        if (submission.finalReportReview && submission.finalReportReview.marks) {
-          const finalMarks = submission.finalReportReview.marks;
-
-          Object.assign(baseData, {
-            // Summary marks
-            'Final - Daily Diary (20)': Number(finalMarks.dailyDiary) || 0,
-            'Final - Project Outcomes (30)': Number(finalMarks.projectOutcomes) || 0,
-
-            // Report marks (100)
-            'Final - Objective & Literature (20)': Number(finalMarks.objectiveLiteratureReview) || 0,
-            'Final - Methodology (20)': Number(finalMarks.methodologyArea) || 0,
-            'Final - Work Description (20)': Number(finalMarks.workDescription) || 0,
-            'Final - Results & Discussion (20)': Number(finalMarks.dataResultDiscussion) || 0,
-            'Final - Format & Plagiarism (20)': Number(finalMarks.overallFormatPlagiarism) || 0,
-            'Final Report Marks (100)': Number(finalMarks.totalReportMarks) || 0,
-
-            // Presentation marks (100)
-            'Final - Define Objective (20)': Number(finalMarks.defineObjective) || 0,
-            'Final - Content (20)': Number(finalMarks.contentPresentation) || 0,
-            'Final - Presentation Skill (20)': Number(finalMarks.presentationSkill) || 0,
-            'Final - Relevance (20)': Number(finalMarks.socialIndustrialRelevance) || 0,
-            'Final - Q&A (20)': Number(finalMarks.questionAnswer) || 0,
-            'Final Presentation Marks (100)': Number(finalMarks.totalPresentationMarks) || 0,
-
-            // Grand total
-            'FINAL GRAND TOTAL (250)': Number(finalMarks.grandTotal) || 0,
-            'Final Report Status': submission.finalReportReview.status || '',
-            'Final Report Reviewed On': this.formatDate(submission.finalReportReview.reviewedAt, 'DD/MM/YYYY'),
-          });
-        } else {
-          Object.assign(baseData, {
-            'Final - Daily Diary (20)': 0,
-            'Final - Project Outcomes (30)': 0,
-            'Final - Objective & Literature (20)': 0,
-            'Final - Methodology (20)': 0,
-            'Final - Work Description (20)': 0,
-            'Final - Results & Discussion (20)': 0,
-            'Final - Format & Plagiarism (20)': 0,
-            'Final Report Marks (100)': 0,
-            'Final - Define Objective (20)': 0,
-            'Final - Content (20)': 0,
-            'Final - Presentation Skill (20)': 0,
-            'Final - Relevance (20)': 0,
-            'Final - Q&A (20)': 0,
-            'Final Presentation Marks (100)': 0,
-            'FINAL GRAND TOTAL (250)': 0,
-            'Final Report Status': submission.finalReportReview?.status || 'Not Started',
-            'Final Report Reviewed On': '',
-          });
-        }
-
-        // ===== DOCUMENT LINKS (Key Documents Only) =====
-        Object.assign(baseData, {
-          // Registration documents
-          'Offer Letter': this.getDocumentURL(submission, 'registrationData.offerLetter'),
-          'NOC Letter': this.getDocumentURL(submission, 'registrationData.nocLetter') || this.getDocumentURL(submission, 'registrationData.noc'),
-          'Stipend Proof': this.getDocumentURL(submission, 'registrationData.stipendProof'),
-
-          // MPR documents (for 7th/8th internships)
-          ...((['7th_internship', '8th_internship'].includes(submission.semesterType)) ? {
-            'MPR1 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr1.document'),
-            'MPR2 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr2.document'),
-            'MPR3 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr3.document'),
-            'MidSem1 Document': this.getDocumentURL(submission, 'mprSubmissions.midSem1.document'),
-            'MidSem2 Document': this.getDocumentURL(submission, 'mprSubmissions.midSem2.document'),
-          } : {}),
-
-          // Project report (for 8th semester projects)
-          ...(submission.semesterType === '8th_project' ? {
-            'Project Report': this.getDocumentURL(submission, 'registrationData.projectReport'),
-          } : {}),
-
-          // Final report documents
-          'Final Report Document': this.getDocumentURL(submission, 'finalReport.finalReport'),
-          'Final PPT': this.getDocumentURL(submission, 'finalReport.finalPPT'),
-          'Completion Certificate': this.getDocumentURL(submission, 'finalReport.certificate'),
-          'Final MPR': this.getDocumentURL(submission, 'finalReport.finalMPR'),
-        });
-
-        // ===== PLACEMENT INFO =====
-        if (submission.finalReport?.hasPPO) {
-          Object.assign(baseData, {
-            'PPO Received': 'Yes',
-            'PPO Amount (LPA)': submission.finalReport.ppoAmount || '',
-            'PPO Offer Letter': this.getDocumentURL(submission, 'finalReport.ppoOfferLetter'),
-          });
-        } else {
-          baseData['PPO Received'] = 'No';
-          baseData['PPO Amount (LPA)'] = '';
-          baseData['PPO Offer Letter'] = '';
-        }
-
-        // ===== FEEDBACK =====
-        Object.assign(baseData, {
-          'Registration Feedback': submission.registrationReview?.feedback || '',
-          'Final Report Feedback': submission.finalReportReview?.feedback || '',
-        });
-
-        // ─── ADDED: make all /uploads/... paths into full http://localhost:5000/... URLs
-        return this.makeUrlsAbsolute(baseData);
-      });
-
-      // Create workbook and worksheet
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-
-      // Enhanced column auto-sizing
-      const colWidths = [];
-      if (excelData.length > 0) {
-        Object.keys(excelData[0]).forEach(key => {
-          const maxLength = Math.max(
-            key.length,
-            ...excelData.slice(0, 50).map(row => String(row[key] || '').length)
-          );
-
-          // Special handling for document URL columns
-          if (key.toLowerCase().includes('document') ||
-            key.toLowerCase().includes('letter') ||
-            key.toLowerCase().includes('certificate') ||
-            key.toLowerCase().includes('ppt') ||
-            key.toLowerCase().includes('proof')) {
-            colWidths.push({ width: Math.min(Math.max(maxLength + 3, 30), 80) });
-          } else if (key.toLowerCase().includes('feedback') || key.toLowerCase().includes('address')) {
-            colWidths.push({ width: Math.min(Math.max(maxLength + 3, 40), 60) });
-          } else {
-            colWidths.push({ width: Math.min(Math.max(maxLength + 3, 12), 40) });
-          }
-        });
-        worksheet['!cols'] = colWidths;
-      }
-
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Progress & Marks');
-
-      // Generate buffer
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-
-      console.log(`✅ Streamlined mentor export completed: ${excelData.length} rows (${students.length} unique students)`);
+      console.log(`✅ Mentor export completed: ${rows.length} rows (${students.length} students)`);
 
       return {
         buffer,
         filename: `${mentor?.name || 'Mentor'}_Students_Marks_${moment().format('DD-MM-YYYY')}.xlsx`,
-        totalRecords: excelData.length
+        totalRecords: rows.length
       };
 
     } catch (error) {
-      console.error('❌ Error exporting streamlined mentor student data:', error);
+      console.error('❌ Error exporting mentor student data:', error);
       throw new Error('Failed to export student data: ' + error.message);
     }
   }
@@ -1720,281 +1620,51 @@ class ExcelService {
   async exportAllStudentDataByBranch(branch = '') {
     try {
       console.log(`Starting admin student export... branch filter: "${branch}"`);
-  
-      // Build student query
+
       const studentQuery = { role: 'student' };
       if (branch) studentQuery.branch = branch;
-  
+
       const students = await User.find(studentQuery)
         .populate('assignedMentor', 'name email department')
         .lean();
-  
-      const studentIds = students.map(s => s._id);
-  
+
+      const studentIds = students.map((s) => s._id);
+      const branchLabel = branch ? branch.replace(/\s+/g, '_') : 'All_Branches';
+
       if (studentIds.length === 0) {
-        const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.json_to_sheet([]);
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Data');
-        const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
         return {
-          buffer,
-          filename: `Students_${branch || 'All_Branches'}_${moment().format('DD-MM-YYYY')}.xlsx`,
+          buffer: this.buildProgressWorkbook([], 'Student Data'),
+          filename: `Students_${branchLabel}_${moment().format('DD-MM-YYYY')}.xlsx`,
           totalRecords: 0
         };
       }
-  
-      // Get ALL submissions for these students — same as mentor export
+
       const submissions = await Submission.find({ student: { $in: studentIds } })
         .populate('student', 'name enrollmentNo email branch phone')
-        .populate('registrationReview.reviewedBy', 'name')
-        .populate('finalReportReview.reviewedBy', 'name')
-        .sort({ 'student.enrollmentNo': 1, createdAt: 1 })
         .lean();
-  
-      // Build a mentor lookup map from students
+
+      // student id -> assigned mentor
       const mentorMap = {};
-      students.forEach(s => {
+      students.forEach((s) => {
         mentorMap[s._id.toString()] = s.assignedMentor;
       });
-  
-      console.log(`Processing ${submissions.length} submissions for ${students.length} students`);
-  
-      // ── Same structure as exportMentorStudentData, one row per submission ──
-      const excelData = submissions.map(submission => {
-        const mentor = mentorMap[submission.student._id.toString()];
-  
-        const baseData = {
-          // ===== BASIC STUDENT INFO =====
-          'Student Name': submission.student?.name || '',
-          'Enrollment No': submission.student?.enrollmentNo || '',
-          'Branch': submission.student?.branch || '',
-          'Email': submission.student?.email || '',
-          'Phone': submission.student?.phone || '',
-  
-          // ===== FACULTY ASSIGNMENT =====
-          'Assigned Faculty': mentor?.name || '',
-          'Faculty Email': mentor?.email || '',
-          'Department': mentor?.department || '',
-  
-          // ===== SUBMISSION STATUS =====
-          'Semester Type': (submission.semesterType || '').replace('_', ' ').toUpperCase(),
-          'Current Status': submission.currentStep || '',
-          'Overall Progress': submission.status || '',
-          'Submitted On': this.formatDate(submission.createdAt, 'DD/MM/YYYY'),
-        };
-  
-        // ===== COMPANY/PROJECT DETAILS =====
-        if (submission.registrationData) {
-          const r = submission.registrationData;
-          Object.assign(baseData, {
-            'Company/Organization': r.companyName || r.projectTitle || '',
-            'Company Type': r.companyType || '',
-            'Company Full Address': r.companyFullAddress || r.companyAddress || '',
-            'Internship/Project Title': r.internshipTitle || r.projectTitle || '',
-            'Internship Type': r.internshipType || '',
-            'Type of Work': r.typeOfWork || '',
-            'Internship Domain': r.internshipDomain || '',
-            'Duration (Months)': r.duration || '',
-            'Start Date': this.formatDate(r.startDate, 'DD/MM/YYYY'),
-            'End Date': this.formatDate(r.endDate, 'DD/MM/YYYY'),
-            'Has Stipend': r.hasStipend ? 'Yes' : 'No',
-            'Stipend Amount (₹/month)': r.stipendAmount || r.stipendPerMonth || '0',
-            'Student Mobile Number': r.studentMobileNumber || '',
-            'Industry Mentor Name': r.mentorName || '',
-            'Industry Mentor Role': r.mentorRole || '',
-            'Industry Mentor Contact Number': r.mentorContactNumber || '',
-            'Industry Mentor Email': r.mentorEmail || '',
-            'HR Name': r.hrName || '',
-            'HR Email': r.hrEmail || '',
-            'Project Type': r.projectType || '',
-          });
-        } else {
-          Object.assign(baseData, {
-            'Company/Organization': '', 'Company Type': '', 'Company Full Address': '',
-            'Internship/Project Title': '', 'Internship Type': '', 'Type of Work': '',
-            'Internship Domain': '', 'Duration (Months)': '', 'Start Date': '', 'End Date': '',
-            'Has Stipend': '', 'Stipend Amount (₹/month)': '', 'Student Mobile Number': '',
-            'Industry Mentor Name': '', 'Industry Mentor Role': '',
-            'Industry Mentor Contact Number': '', 'Industry Mentor Email': '',
-            'HR Name': '', 'HR Email': '', 'Project Type': '',
-          });
-        }
-  
-        // ===== REGISTRATION MARKS =====
-        if (submission.registrationReview?.marks) {
-          const m = submission.registrationReview.marks;
-          Object.assign(baseData, {
-            'Registration - Objective/Problem (5)': Number(m.objectiveProblemIdentification) || 0,
-            'Registration - Methodology (5)': Number(m.proposedMethodology) || 0,
-            'Registration - Relevance (5)': Number(m.relevanceRealWorld) || 0,
-            'Registration - Synopsis (5)': Number(m.synopsisPresentation) || 0,
-            'Registration Total Marks (20)': Number(m.totalRegistrationMarks) || 0,
-            'Registration Status': submission.registrationReview.status || '',
-            'Registration Reviewed On': this.formatDate(submission.registrationReview.reviewedAt, 'DD/MM/YYYY'),
-          });
-        } else {
-          Object.assign(baseData, {
-            'Registration - Objective/Problem (5)': 0,
-            'Registration - Methodology (5)': 0,
-            'Registration - Relevance (5)': 0,
-            'Registration - Synopsis (5)': 0,
-            'Registration Total Marks (20)': 0,
-            'Registration Status': submission.registrationReview?.status || 'Not Started',
-            'Registration Reviewed On': '',
-          });
-        }
-  
-        // ===== MPR MARKS (7th & 8th internships) =====
-        if (['7th_internship', '8th_internship'].includes(submission.semesterType)) {
-          if (submission.mprSubmissions) {
-            ['mpr1', 'mpr2', 'mpr3'].forEach(mprType => {
-              const mpr = submission.mprSubmissions[mprType];
-              if (mpr) {
-                baseData[`${mprType.toUpperCase()} Marks (10)`] = Number(typeof mpr.marks === 'number' ? mpr.marks : 0) || 0;
-                baseData[`${mprType.toUpperCase()} Status`] = mpr.status || 'Not Submitted';
-              } else {
-                baseData[`${mprType.toUpperCase()} Marks (10)`] = 0;
-                baseData[`${mprType.toUpperCase()} Status`] = 'Not Submitted';
-              }
-            });
-  
-            const mid1 = submission.mprSubmissions.midSem1;
-            if (mid1?.marks) {
-              Object.assign(baseData, {
-                'MidSem1 - Daily Diary (10)': Number(mid1.marks.dailyDiary) || 0,
-                'MidSem1 - Outcomes (10)': Number(mid1.marks.expectedAchievedOutcomes) || 0,
-                'MidSem1 - Report (30)': Number(mid1.marks.briefReport) || 0,
-                'MidSem1 - Presentation (50)': Number(mid1.marks.presentationViva) || 0,
-                'MidSem1 Total (100)': Number(mid1.marks.total) || 0,
-                'MidSem1 Status': mid1.status || 'Not Submitted',
-              });
-            } else {
-              Object.assign(baseData, {
-                'MidSem1 - Daily Diary (10)': 0, 'MidSem1 - Outcomes (10)': 0,
-                'MidSem1 - Report (30)': 0, 'MidSem1 - Presentation (50)': 0,
-                'MidSem1 Total (100)': 0, 'MidSem1 Status': mid1?.status || 'Not Submitted',
-              });
-            }
-  
-            const mprTypes = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
-            const approvedCount = mprTypes.filter(t => submission.mprSubmissions[t]?.status === 'approved').length;
-            baseData['MPRs Approved (out of 4)'] = `${approvedCount}/4`;
-  
-            Object.assign(baseData, {
-              'MPR1 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr1.document'),
-              'MPR2 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr2.document'),
-              'MPR3 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr3.document'),
-              'MidSem1 Document': this.getDocumentURL(submission, 'mprSubmissions.midSem1.document'),
-            });
-          }
-        }
-  
-        // ===== FINAL REPORT MARKS =====
-        if (submission.finalReportReview?.marks) {
-          const fm = submission.finalReportReview.marks;
-          Object.assign(baseData, {
-            'Final - Daily Diary (20)': Number(fm.dailyDiary) || 0,
-            'Final - Project Outcomes (30)': Number(fm.projectOutcomes) || 0,
-            'Final - Objective & Literature (20)': Number(fm.objectiveLiteratureReview) || 0,
-            'Final - Methodology (20)': Number(fm.methodologyArea) || 0,
-            'Final - Work Description (20)': Number(fm.workDescription) || 0,
-            'Final - Results & Discussion (20)': Number(fm.dataResultDiscussion) || 0,
-            'Final - Format & Plagiarism (20)': Number(fm.overallFormatPlagiarism) || 0,
-            'Final Report Marks (100)': Number(fm.totalReportMarks) || 0,
-            'Final - Define Objective (20)': Number(fm.defineObjective) || 0,
-            'Final - Content (20)': Number(fm.contentPresentation) || 0,
-            'Final - Presentation Skill (20)': Number(fm.presentationSkill) || 0,
-            'Final - Relevance (20)': Number(fm.socialIndustrialRelevance) || 0,
-            'Final - Q&A (20)': Number(fm.questionAnswer) || 0,
-            'Final Presentation Marks (100)': Number(fm.totalPresentationMarks) || 0,
-            'FINAL GRAND TOTAL (250)': Number(fm.grandTotal) || 0,
-            'Final Report Status': submission.finalReportReview.status || '',
-            'Final Report Reviewed On': this.formatDate(submission.finalReportReview.reviewedAt, 'DD/MM/YYYY'),
-          });
-        } else {
-          Object.assign(baseData, {
-            'Final - Daily Diary (20)': 0, 'Final - Project Outcomes (30)': 0,
-            'Final - Objective & Literature (20)': 0, 'Final - Methodology (20)': 0,
-            'Final - Work Description (20)': 0, 'Final - Results & Discussion (20)': 0,
-            'Final - Format & Plagiarism (20)': 0, 'Final Report Marks (100)': 0,
-            'Final - Define Objective (20)': 0, 'Final - Content (20)': 0,
-            'Final - Presentation Skill (20)': 0, 'Final - Relevance (20)': 0,
-            'Final - Q&A (20)': 0, 'Final Presentation Marks (100)': 0,
-            'FINAL GRAND TOTAL (250)': 0,
-            'Final Report Status': submission.finalReportReview?.status || 'Not Started',
-            'Final Report Reviewed On': '',
-          });
-        }
-  
-        // ===== DOCUMENT LINKS =====
-        Object.assign(baseData, {
-          'Offer Letter': this.getDocumentURL(submission, 'registrationData.offerLetter'),
-          'NOC Letter': this.getDocumentURL(submission, 'registrationData.nocLetter') || this.getDocumentURL(submission, 'registrationData.noc'),
-          'Stipend Proof': this.getDocumentURL(submission, 'registrationData.stipendProof'),
-          ...((['7th_internship', '8th_internship'].includes(submission.semesterType)) ? {
-            'MPR1 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr1.document'),
-            'MPR2 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr2.document'),
-            'MPR3 Document': this.getDocumentURL(submission, 'mprSubmissions.mpr3.document'),
-            'MidSem1 Document': this.getDocumentURL(submission, 'mprSubmissions.midSem1.document'),
-          } : {}),
-          ...(submission.semesterType === '8th_project' ? {
-            'Project Report': this.getDocumentURL(submission, 'registrationData.projectReport'),
-          } : {}),
-          'Final Report Document': this.getDocumentURL(submission, 'finalReport.finalReport'),
-          'Final PPT': this.getDocumentURL(submission, 'finalReport.finalPPT'),
-          'Completion Certificate': this.getDocumentURL(submission, 'finalReport.certificate'),
-          'Final MPR': this.getDocumentURL(submission, 'finalReport.finalMPR'),
-        });
-  
-        // ===== PPO =====
-        if (submission.finalReport?.hasPPO) {
-          Object.assign(baseData, {
-            'PPO Received': 'Yes',
-            'PPO Amount (LPA)': submission.finalReport.ppoAmount || '',
-            'PPO Offer Letter': this.getDocumentURL(submission, 'finalReport.ppoOfferLetter'),
-          });
-        } else {
-          baseData['PPO Received'] = 'No';
-          baseData['PPO Amount (LPA)'] = '';
-          baseData['PPO Offer Letter'] = '';
-        }
-  
-        // ===== FEEDBACK =====
-        Object.assign(baseData, {
-          'Registration Feedback': submission.registrationReview?.feedback || '',
-          'Final Report Feedback': submission.finalReportReview?.feedback || '',
-        });
-  
-        return this.makeUrlsAbsolute(baseData);
-      });
-  
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-  
-      if (excelData.length > 0) {
-        const colWidths = Object.keys(excelData[0]).map(key => {
-          const maxLen = Math.max(key.length, ...excelData.slice(0, 100).map(r => String(r[key] || '').length));
-          const isWide = key.toLowerCase().includes('document') || key.toLowerCase().includes('letter') ||
-            key.toLowerCase().includes('certificate') || key.toLowerCase().includes('ppt') ||
-            key.toLowerCase().includes('proof') || key.toLowerCase().includes('feedback') ||
-            key.toLowerCase().includes('address');
-          return { width: Math.min(Math.max(maxLen + 3, 12), isWide ? 80 : 40) };
-        });
-        worksheet['!cols'] = colWidths;
-      }
-  
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Data');
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-  
-      const branchLabel = branch ? branch.replace(/\s+/g, '_') : 'All_Branches';
-      console.log(`✅ Admin export done: ${excelData.length} rows for ${students.length} students`);
-  
+
+      const rows = this.sortSubmissionsByEnrollment(
+        submissions.filter((s) => s.student)
+      ).map((submission) =>
+        this.buildProgressRow(submission, mentorMap[submission.student._id.toString()], true)
+      );
+
+      const buffer = this.buildProgressWorkbook(rows, 'Student Data');
+
+      console.log(`✅ Admin export done: ${rows.length} rows for ${students.length} students`);
+
       return {
         buffer,
         filename: `Students_${branchLabel}_${moment().format('DD-MM-YYYY')}.xlsx`,
-        totalRecords: excelData.length
+        totalRecords: rows.length
       };
-  
+
     } catch (error) {
       console.error('Error in exportAllStudentDataByBranch:', error);
       throw new Error('Failed to export student data: ' + error.message);

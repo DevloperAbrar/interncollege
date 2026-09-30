@@ -11,28 +11,15 @@ import {
   TrendingUp,
   AlertCircle,
   Calendar,
-  Download,
-  FolderOpen,
-  XCircle,
-  Link as LinkIcon,
-  RefreshCw
+  Download
 } from 'lucide-react'
 
 const MentorDashboard = () => {
   const { execute, loading } = useApi()
   const [stats, setStats] = useState(null)
 
-  // ─── NEW: Drive folder state ────────────────────────────────────────────────
-  const [driveStatus, setDriveStatus] = useState(null) // { driveFolderId, driveFolderLink, driveFolderStatus }
-  const [driveLoading, setDriveLoading] = useState(true)
-  const [folderInput, setFolderInput] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [driveError, setDriveError] = useState('')
-  const [driveSuccess, setDriveSuccess] = useState('')
-
   useEffect(() => {
     loadDashboardStats()
-    loadDriveStatus()
   }, [])
 
   const loadDashboardStats = async () => {
@@ -44,50 +31,6 @@ const MentorDashboard = () => {
     } catch (error) {
       console.error('Error loading dashboard stats:', error)
     }
-  }
-
-  const loadDriveStatus = async () => {
-    setDriveLoading(true)
-    try {
-      const res = await mentorService.getDriveFolderStatus()
-      if (res.success) {
-        setDriveStatus(res.data)
-        setFolderInput(res.data.driveFolderLink || '')
-      }
-    } catch (error) {
-      console.error('Error loading drive status:', error)
-    } finally {
-      setDriveLoading(false)
-    }
-  }
-
-  const handleSaveFolder = async () => {
-    if (!folderInput.trim()) {
-      setDriveError('Please paste your Google Drive folder link')
-      return
-    }
-    setSaving(true)
-    setDriveError('')
-    setDriveSuccess('')
-    try {
-      const res = await mentorService.setDriveFolder(folderInput.trim())
-      if (res.success) {
-        setDriveSuccess('Google Drive folder connected successfully!')
-        await loadDriveStatus()
-      } else {
-        setDriveError(res.message || 'Failed to connect folder')
-      }
-    } catch (err) {
-      setDriveError(err.response?.data?.message || 'Failed to connect folder. Please check the link and sharing permissions.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRecheck = async () => {
-    setDriveError('')
-    setDriveSuccess('')
-    await loadDriveStatus()
   }
 
   const handleExport = async () => {
@@ -161,95 +104,6 @@ const MentorDashboard = () => {
           <Download className="h-4 w-4 mr-2" />
           Export Student Data
         </button>
-      </div>
-
-      {/* ─── NEW: Google Drive Folder Card ────────────────────────────────────── */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <FolderOpen className="h-5 w-5 mr-2 text-blue-600" />
-            Document Storage — Google Drive Folder
-          </h3>
-          {!driveLoading && driveStatus?.driveFolderStatus && (
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${driveStatus.driveFolderStatus === 'connected'
-                ? 'bg-green-100 text-green-800'
-                : driveStatus.driveFolderStatus === 'access_revoked'
-                  ? 'bg-red-100 text-red-800'
-                  : 'bg-gray-100 text-gray-700'
-              }`}>
-              {driveStatus.driveFolderStatus === 'connected' && <CheckCircle className="h-3.5 w-3.5 mr-1" />}
-              {driveStatus.driveFolderStatus === 'access_revoked' && <XCircle className="h-3.5 w-3.5 mr-1" />}
-              {driveStatus.driveFolderStatus === 'connected' ? 'Connected' :
-                driveStatus.driveFolderStatus === 'access_revoked' ? 'Access Revoked' : 'Not Connected'}
-            </span>
-          )}
-        </div>
-
-        {driveLoading ? (
-          <div className="animate-pulse h-10 bg-gray-100 rounded"></div>
-        ) : (
-          <>
-            {driveStatus?.driveFolderStatus === 'access_revoked' && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                We lost access to your folder. Your students' uploads are currently blocked. Please re-share the folder (see steps below) and click "Connect" again.
-              </div>
-            )}
-
-            {driveStatus?.driveFolderStatus === 'not_connected' && (
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-                Your students cannot upload documents until you connect a Google Drive folder.
-              </div>
-            )}
-
-            <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm text-gray-600 space-y-1">
-              <p className="font-semibold text-gray-700">Setup steps:</p>
-              <p>1. Create a folder in your Google Drive (e.g. "My Students").</p>
-              <p>2. Right-click → Share → General access → set to "Anyone with the link" → role "Editor".</p>
-              <p>3. Copy the folder's link and paste it below.</p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex items-center flex-1 border border-gray-300 rounded-lg px-3 focus-within:ring-2 focus-within:ring-blue-500">
-                <LinkIcon className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
-                <input
-                  type="text"
-                  value={folderInput}
-                  onChange={(e) => setFolderInput(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/..."
-                  className="flex-1 py-2 border-0 outline-none text-sm text-gray-900"
-                />
-              </div>
-              <button
-                onClick={handleSaveFolder}
-                disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {saving ? (
-                  <>
-                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Connect'
-                )}
-              </button>
-              <button
-                onClick={handleRecheck}
-                className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Recheck
-              </button>
-            </div>
-
-            {driveError && (
-              <p className="text-sm text-red-600 mt-3">{driveError}</p>
-            )}
-            {driveSuccess && (
-              <p className="text-sm text-green-600 mt-3">{driveSuccess}</p>
-            )}
-          </>
-        )}
       </div>
 
       {/* Overview Stats */}

@@ -2229,60 +2229,7 @@ const ReviewSubmissions = () => {
                     </div>
                   )}
 
-                  {/* Review Section */}
-                  {selectedSubmission.currentReviewStatus === 'pending' && (
-                    <div className="bg-yellow-50 p-6 rounded-lg border-2 border-yellow-200">
-                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
-                        <AlertCircle className="h-5 w-5 mr-2 text-yellow-600" />
-                        Review Decision Required
-                      </h4>
-
-                      <div className="space-y-4">
-                        <div className="flex space-x-4">
-                          <button
-                            onClick={() => setReviewAction('approve')}
-                            className={`flex items-center px-6 py-3 rounded-lg transition-all duration-200 ${reviewAction === 'approve'
-                              ? 'bg-green-600 text-white shadow-lg scale-105'
-                              : 'bg-green-100 text-green-800 hover:bg-green-200 border border-green-300'
-                              }`}
-                          >
-                            <CheckCircle className="h-5 w-5 mr-2" />
-                            Approve & Assign Marks
-                          </button>
-                          <button
-                            onClick={() => setReviewAction('reject')}
-                            className={`flex items-center px-6 py-3 rounded-lg transition-all duration-200 ${reviewAction === 'reject'
-                              ? 'bg-red-600 text-white shadow-lg scale-105'
-                              : 'bg-red-100 text-red-800 hover:bg-red-200 border border-red-300'
-                              }`}
-                          >
-                            <XCircle className="h-5 w-5 mr-2" />
-                            Reject Submission
-                          </button>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Feedback {reviewAction === 'reject' && <span className="text-red-500">*</span>}
-                            {reviewAction === 'approve' && <span className="text-gray-500">(Optional)</span>}
-                          </label>
-                          <textarea
-                            value={feedback}
-                            onChange={(e) => setFeedback(e.target.value)}
-                            rows={4}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder={
-                              reviewAction === 'approve'
-                                ? "Enter positive feedback or suggestions..."
-                                : reviewAction === 'reject'
-                                  ? "Please provide specific reasons for rejection..."
-                                  : "Select approve or reject first..."
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+ 
                 </div>
               )}
 

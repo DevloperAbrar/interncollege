@@ -73,6 +73,7 @@ const submissionSchema = new mongoose.Schema({
   registrationData: {
     companyName: String,
     companyType: { type: String, enum: ['startup', 'mnc', 'government', 'psu', 'academic_institute', 'research', 'other'] },
+    companyTypeOther: String,
     internshipType: String,
     internshipTitle: String,
     startDate: Date,
@@ -93,6 +94,7 @@ const submissionSchema = new mongoose.Schema({
     hrEmail: String,
     offerLetter: String,
     nocLetter: String,
+    synopsisPPT: String,
     projectTitle: String,
     projectType: { type: String, enum: ['software', 'hardware', 'software_hardware', 'experimental'] },
     projectReport: String

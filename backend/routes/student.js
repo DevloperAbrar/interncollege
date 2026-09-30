@@ -1,9 +1,9 @@
-// routes/student.js - ADD THIS NEW ROUTE
+// routes/student.js
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const { studentOnly } = require('../middleware/roleCheck');
-const { upload, handleUploadError } = require('../middleware/upload');
+const { upload, registrationUpload, handleUploadError } = require('../middleware/upload');
 const { 
   validateRegistrationSubmission,
   validateMPRSubmission,
@@ -17,7 +17,7 @@ const {
   submitFinalReport,
   getProgress,
   updateSubmission,
-  getSubmissionHistory // NEW import
+  getSubmissionHistory
 } = require('../controllers/studentController');
 
 // Apply auth and student role check to all routes
@@ -30,15 +30,17 @@ router.get('/dashboard', getDashboard);
 // Progress tracking
 router.get('/progress', getProgress);
 
-// NEW ROUTE: Get submission history
+// Get submission history
 router.get('/history', getSubmissionHistory);
 
 // Registration submission (handles all semester types)
+// Uses registrationUpload: max 2 MB per file, PDF (synopsis also PPT/PPTX)
 router.post('/submit/registration',
-  upload.fields([
+  registrationUpload.fields([
     { name: 'stipendProof', maxCount: 1 },
     { name: 'offerLetter', maxCount: 1 },
     { name: 'nocLetter', maxCount: 1 },
+    { name: 'synopsisPPT', maxCount: 1 },
     { name: 'projectReport', maxCount: 1 }
   ]),
   handleUploadError,
@@ -84,6 +86,7 @@ router.put('/submission/:id',
     { name: 'stipendProof', maxCount: 1 },
     { name: 'offerLetter', maxCount: 1 },
     { name: 'nocLetter', maxCount: 1 },
+    { name: 'synopsisPPT', maxCount: 1 },
     { name: 'projectReport', maxCount: 1 },
     { name: 'finalPPT', maxCount: 1 },
     { name: 'finalReport', maxCount: 1 },

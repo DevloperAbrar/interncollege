@@ -392,11 +392,13 @@ async uploadStudentDocuments(studentData, files, parentFolderId = null, cachedSt
     };
 
     // Define expected file field mappings
+    // Define expected file field mappings
     const fieldMappings = {
       'offerLetter': 'Offer_Letter',
       'noc': 'NOC_Document',
       'nocLetter': 'NOC_Document',
       'stipendProof': 'Stipend_Proof',
+      'synopsisPPT': 'Internship_Synopsis',
       'projectReport': 'Project_Report',
       'document': 'MPR_Document'
     };

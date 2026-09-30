@@ -16,6 +16,7 @@ const FileUpload = ({
 }) => {
   const [dragActive, setDragActive] = useState(false)
   const [files, setFiles] = useState([])
+  const [localError, setLocalError] = useState('')
   const fileInputRef = useRef(null)
 
   const handleFiles = (fileList) => {
@@ -42,6 +43,9 @@ const FileUpload = ({
 
     if (errors.length > 0) {
       console.error('File validation errors:', errors)
+      setLocalError(`${errors[0].file}: ${errors[0].errors.join('. ')}`)
+    } else {
+      setLocalError('')
     }
   }
 
@@ -70,17 +74,22 @@ const FileUpload = ({
     if (e.target.files && e.target.files[0]) {
       handleFiles(e.target.files)
     }
+    // Reset so selecting the same file again still triggers onChange
+    e.target.value = ''
   }
 
   const removeFile = (index) => {
     const newFiles = files.filter((_, i) => i !== index)
     setFiles(newFiles)
+    setLocalError('')
     onFileSelect(multiple ? newFiles : null)
   }
 
   const openFileDialog = () => {
     fileInputRef.current?.click()
   }
+
+  const displayError = localError || error
 
   return (
     <div className="w-full">
@@ -96,7 +105,7 @@ const FileUpload = ({
         className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
           dragActive 
             ? 'border-blue-400 bg-blue-50' 
-            : error
+            : displayError
             ? 'border-red-300 bg-red-50'
             : 'border-gray-300 hover:border-gray-400'
         }`}
@@ -115,7 +124,7 @@ const FileUpload = ({
         />
         
         <div className="text-center">
-          <Upload className={`mx-auto h-12 w-12 ${error ? 'text-red-400' : 'text-gray-400'}`} />
+          <Upload className={`mx-auto h-12 w-12 ${displayError ? 'text-red-400' : 'text-gray-400'}`} />
           <div className="mt-4">
             <button
               type="button"
@@ -133,10 +142,10 @@ const FileUpload = ({
       </div>
 
       {/* Error Message */}
-      {error && (
-        <div className="mt-2 flex items-center text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 mr-1" />
-          {error}
+      {displayError && (
+        <div role="alert" className="mt-2 flex items-start text-sm text-red-600">
+          <AlertCircle className="h-4 w-4 mr-1 mt-0.5 shrink-0" />
+          <span>{displayError}</span>
         </div>
       )}
 
@@ -156,17 +165,19 @@ const FileUpload = ({
       {files.length > 0 && (
         <div className="mt-3 space-y-2">
           {files.map((file, index) => (
-            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-              <div className="flex items-center">
-                <File className="h-4 w-4 text-gray-400 mr-2" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{file.name}</p>
+            <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg border">
+              <div className="flex items-center min-w-0">
+                <File className="h-4 w-4 text-gray-400 mr-2 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
                   <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => removeFile(index)}
-                className="text-red-400 hover:text-red-600"
+                className="text-red-400 hover:text-red-600 shrink-0"
+                aria-label={`Remove ${file.name}`}
               >
                 <X className="h-4 w-4" />
               </button>

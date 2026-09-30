@@ -1,10 +1,251 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApi } from '../../hooks/useApi'
 import { studentService } from '../../services/studentService'
 import FileUpload from '../common/FileUpload'
-import { Building, Code, Calendar, DollarSign, User, FileText, ArrowLeft, Info, Lock } from 'lucide-react'
+import {
+  Building,
+  Building2,
+  Code,
+  Calendar,
+  IndianRupee,
+  Users,
+  FileText,
+  ArrowLeft,
+  Info,
+  Lock,
+  AlertCircle,
+  ChevronDown
+} from 'lucide-react'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2 MB per document
+
+const COMPANY_TYPE_OPTIONS = [
+  ['startup', 'Startup'],
+  ['mnc', 'MNC'],
+  ['government', 'Government'],
+  ['psu', 'PSU'],
+  ['academic_institute', 'Academic Institute'],
+  ['research', 'Research'],
+  ['other', 'Other']
+]
+
+const WORK_TYPE_OPTIONS = [
+  ['software', 'Software'],
+  ['hardware', 'Hardware'],
+  ['product_development', 'Product Development'],
+  ['software_hardware', 'Software & Hardware'],
+  ['experiment_based', 'Experiment Based'],
+  ['testing_based', 'Testing Based'],
+  ['case_study', 'Case Study'],
+  ['other', 'Other']
+]
+
+const INTERNSHIP_TYPE_OPTIONS = [
+  ['remote', 'Remote'],
+  ['onsite', 'On-site'],
+  ['hybrid', 'Hybrid']
+]
+
+const PROJECT_TYPE_OPTIONS = [
+  ['software', 'Software'],
+  ['hardware', 'Hardware'],
+  ['software_hardware', 'Software & Hardware'],
+  ['experimental', 'Experimental']
+]
+
+const PHONE_FIELDS = ['studentMobileNumber', 'mentorContactNumber']
+
+// ─── Validation helpers ───────────────────────────────────────────────────────
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
+const MOBILE_REGEX = /^[6-9]\d{9}$/
+const PERSON_NAME_REGEX = /^\p{L}[\p{L} .'-]{1,49}$/u
+const HAS_ALNUM_REGEX = /[\p{L}\p{N}]/u
+
+const isValidDate = (value) => {
+  const d = new Date(value)
+  return !Number.isNaN(d.getTime()) && d.getFullYear() >= 2000 && d.getFullYear() <= 2100
+}
+
+const textRule = (label, min, max) => (value) => {
+  const s = (value || '').trim()
+  if (!s) return `${label} is required`
+  if (s.length < min) return `${label} must be at least ${min} characters`
+  if (s.length > max) return `${label} must not exceed ${max} characters`
+  if (!HAS_ALNUM_REGEX.test(s)) return `Enter a valid ${label.toLowerCase()}`
+  return ''
+}
+
+const nameRule = (label) => (value) => {
+  const s = (value || '').trim()
+  if (!s) return `${label} is required`
+  if (!PERSON_NAME_REGEX.test(s)) return `Enter a valid ${label.toLowerCase()} (letters only, 2–50 characters)`
+  return ''
+}
+
+const emailRule = (label) => (value) => {
+  const s = (value || '').trim()
+  if (!s) return `${label} is required`
+  if (s.length > 254 || s.includes('..') || !EMAIL_REGEX.test(s)) {
+    return 'Enter a valid email address (e.g., name@company.com)'
+  }
+  return ''
+}
+
+const mobileRule = (label) => (value) => {
+  const s = (value || '').trim()
+  if (!s) return `${label} is required`
+  if (!/^\d+$/.test(s)) return `${label} must contain digits only`
+  if (s.length !== 10) return `${label} must be exactly 10 digits`
+  if (!MOBILE_REGEX.test(s)) return 'Mobile number must start with 6, 7, 8 or 9'
+  return ''
+}
+
+const fieldValidators = {
+  companyName: textRule('Company name', 2, 100),
+  companyType: (v) => (v ? '' : 'Please select a company type'),
+  companyTypeOther: (v) => {
+    if (!(v || '').trim()) return 'Please specify your company type'
+    return textRule('Company type', 2, 50)(v)
+  },
+  companyFullAddress: textRule('Company address', 20, 300),
+  typeOfWork: (v) => (v ? '' : 'Please select the type of work'),
+  internshipDomain: textRule('Internship domain', 2, 100),
+  internshipTitle: textRule('Internship title', 5, 100),
+  internshipType: (v) => (v ? '' : 'Please select the internship type'),
+  startDate: (v) => {
+    if (!v) return 'Start date is required'
+    if (!isValidDate(v)) return 'Enter a valid start date'
+    return ''
+  },
+  endDate: (v, d) => {
+    if (!v) return 'End date is required'
+    if (!isValidDate(v)) return 'Enter a valid end date'
+    if (d.startDate && isValidDate(d.startDate) && new Date(v) <= new Date(d.startDate)) {
+      return 'End date must be after the start date'
+    }
+    return ''
+  },
+  stipendAmount: (v) => {
+    const s = String(v || '').trim()
+    if (!s) return 'Stipend amount is required'
+    if (!/^\d+$/.test(s) || Number(s) < 1) return 'Enter a valid amount greater than 0'
+    if (Number(s) > 1000000) return 'Amount looks too high. Please check and re-enter'
+    return ''
+  },
+  mentorName: nameRule('Mentor name'),
+  mentorRole: textRule('Mentor role', 2, 100),
+  mentorEmail: emailRule('Mentor email'),
+  mentorContactNumber: mobileRule('Mentor contact number'),
+  hrName: nameRule('HR name'),
+  hrEmail: emailRule('HR email'),
+  studentMobileNumber: mobileRule('Student mobile number')
+}
+
+const FILE_RULES = {
+  stipendProof: { label: 'Stipend proof', types: ['pdf'] },
+  offerLetter: { label: 'Offer letter', types: ['pdf'] },
+  nocLetter: { label: 'NOC letter', types: ['pdf'] },
+  synopsisPPT: { label: 'Internship synopsis', types: ['pdf', 'ppt', 'pptx'] },
+  projectReport: { label: 'Project report', types: ['pdf'] }
+}
+
+const validateFileField = (name, file) => {
+  const rule = FILE_RULES[name]
+  if (!file) return `${rule.label} is required`
+  const ext = (file.name.split('.').pop() || '').toLowerCase()
+  if (!rule.types.includes(ext)) {
+    return `${rule.label} must be a ${rule.types.map((t) => t.toUpperCase()).join(' or ')} file`
+  }
+  if (file.size === 0) return `${rule.label} appears to be empty`
+  if (file.size > MAX_FILE_SIZE) return `${rule.label} must be 2 MB or smaller`
+  return ''
+}
+
+const getActiveFields = (d) =>
+  Object.keys(fieldValidators).filter((name) => {
+    if (name === 'companyTypeOther') return d.companyType === 'other'
+    if (name === 'stipendAmount') return d.hasStipend
+    return true
+  })
+
+const getActiveFileFields = (d) => [
+  'offerLetter',
+  'nocLetter',
+  'synopsisPPT',
+  ...(d.hasStipend ? ['stipendProof'] : [])
+]
+
+const normalizePhone = (raw) => {
+  let digits = raw.replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2) // pasted +91 number
+  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1) // pasted 0-prefixed number
+  return digits.slice(0, 10)
+}
+
+const inputClass = (hasError) =>
+  `block w-full rounded-lg border bg-white px-3.5 py-2.5 text-base text-slate-900 placeholder:text-slate-400 shadow-sm transition focus:outline-none focus:ring-2 ${
+    hasError
+      ? 'border-red-400 focus:border-red-500 focus:ring-red-100'
+      : 'border-slate-300 focus:border-blue-600 focus:ring-blue-100'
+  }`
+
+// ─── Presentational helpers (defined outside so inputs never remount) ────────
+const SectionCard = ({ icon: Icon, title, description, children }) => (
+  <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <header className="flex items-start gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
+      </div>
+    </header>
+    <div className="p-5 sm:p-6">{children}</div>
+  </section>
+)
+
+const Field = ({ name, label, required, error, hint, className = '', children }) => (
+  <div id={`field-${name}`} className={className}>
+    <label htmlFor={name} className="mb-1.5 block text-sm font-medium text-slate-700">
+      {label}
+      {required && <span className="ml-0.5 text-red-500">*</span>}
+    </label>
+    {children}
+    {error ? (
+      <p id={`${name}-error`} role="alert" className="mt-1.5 flex items-start gap-1.5 text-sm text-red-600">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{error}</span>
+      </p>
+    ) : hint ? (
+      <p className="mt-1.5 text-xs text-slate-500">{hint}</p>
+    ) : null}
+  </div>
+)
+
+const Select = ({ options, placeholder, className = '', ...props }) => (
+  <div className="relative">
+    <select {...props} className={`${className} appearance-none pr-10`}>
+      <option value="">{placeholder}</option>
+      {options.map(([value, label]) => (
+        <option key={value} value={value}>
+          {label}
+        </option>
+      ))}
+    </select>
+    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+  </div>
+)
+
+const SubHeading = ({ children }) => (
+  <div className="border-b border-slate-200 pb-2 pt-1 md:col-span-2">
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">{children}</h3>
+  </div>
+)
+
+// ─── Main component ──────────────────────────────────────────────────────────
 const RegistrationForm = () => {
   const navigate = useNavigate()
   const location = useLocation()
@@ -13,7 +254,7 @@ const RegistrationForm = () => {
   const semesterType = location.state?.semesterType || '8th_internship'
   const [selectedSubType, setSelectedSubType] = useState('')
 
-  // ─── NEW: uploads-enabled state ────────────────────────────────────────────
+  // ─── uploads-enabled state ────────────────────────────────────────────────
   const [uploadsEnabled, setUploadsEnabled] = useState(true)
   const [uploadsClosedReason, setUploadsClosedReason] = useState('')
   const [checkingAccess, setCheckingAccess] = useState(true)
@@ -39,6 +280,7 @@ const RegistrationForm = () => {
   const [formData, setFormData] = useState({
     companyName: '',
     companyType: '',
+    companyTypeOther: '',
     internshipType: '',
     internshipTitle: '',
     startDate: '',
@@ -63,39 +305,95 @@ const RegistrationForm = () => {
     stipendProof: null,
     offerLetter: null,
     nocLetter: null,
+    synopsisPPT: null,
     projectReport: null
   })
 
   const [formErrors, setFormErrors] = useState({})
+  const [submitError, setSubmitError] = useState('')
+  const submitErrorRef = useRef(null)
 
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
-  // ─── NEW: distinguishes real byte-upload from server-side processing ────────
-  // 'uploading' = files still being sent (real % from axios onUploadProgress)
-  // 'processing' = 100% sent, waiting on server to save/validate/respond
+  // 'uploading' = files still being sent, 'processing' = 100% sent, waiting on server
   const [submitPhase, setSubmitPhase] = useState('uploading')
 
   const show8thTypeSelection = false
   const isProjectType = false
-  const isInternshipType = true
+
+  useEffect(() => {
+    if (submitError) {
+      submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [submitError])
+
+  const scrollToFirstError = (errors) => {
+    requestAnimationFrame(() => {
+      const nodes = Array.from(document.querySelectorAll('[id^="field-"]'))
+      const target = nodes.find((n) => errors[n.id.replace('field-', '')])
+      if (!target) return
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target.querySelector('input:not([type="file"]), select, textarea')?.focus({ preventScroll: true })
+    })
+  }
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }))
-    if (formErrors[name]) {
-      setFormErrors(prev => ({ ...prev, [name]: '' }))
+    let next = type === 'checkbox' ? checked : value
+
+    if (PHONE_FIELDS.includes(name)) next = normalizePhone(value)
+    if (name === 'stipendAmount') next = value.replace(/\D/g, '').slice(0, 7)
+
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: next }
+      if (name === 'companyType' && next !== 'other') updated.companyTypeOther = ''
+      if (name === 'hasStipend' && !next) updated.stipendAmount = ''
+      return updated
+    })
+
+    if (name === 'hasStipend' && !next) {
+      setFiles((prev) => ({ ...prev, stipendProof: null }))
     }
+
+    setFormErrors((prev) => {
+      const updated = { ...prev, [name]: '' }
+      if (name === 'companyType') updated.companyTypeOther = ''
+      if (name === 'hasStipend' && !next) {
+        updated.stipendAmount = ''
+        updated.stipendProof = ''
+      }
+      // Re-check end date live when start date changes
+      if (name === 'startDate' && formData.endDate) {
+        updated.endDate = fieldValidators.endDate(formData.endDate, { ...formData, startDate: next })
+      }
+      return updated
+    })
+  }
+
+  const handleBlur = (e) => {
+    const { name } = e.target
+    if (!fieldValidators[name] || !getActiveFields(formData).includes(name)) return
+    const message = fieldValidators[name](formData[name], formData)
+    setFormErrors((prev) => ({ ...prev, [name]: message }))
   }
 
   const handleFileSelect = (fieldName, file) => {
-    setFiles(prev => ({ ...prev, [fieldName]: file }))
+    setFiles((prev) => ({ ...prev, [fieldName]: file }))
     if (formErrors[fieldName]) {
-      setFormErrors(prev => ({ ...prev, [fieldName]: '' }))
+      setFormErrors((prev) => ({ ...prev, [fieldName]: '' }))
     }
   }
+
+  const bind = (name) => ({
+    id: name,
+    name,
+    value: formData[name],
+    onChange: handleChange,
+    onBlur: handleBlur,
+    className: inputClass(Boolean(formErrors[name])),
+    'aria-invalid': Boolean(formErrors[name]),
+    'aria-describedby': formErrors[name] ? `${name}-error` : undefined
+  })
 
   const validateForm = () => {
     const errors = {}
@@ -107,110 +405,29 @@ const RegistrationForm = () => {
       if (!formData.projectType) {
         errors.projectType = 'Project type is required'
       }
-      if (!files.projectReport) {
-        errors.projectReport = 'Project report is required'
-      }
+      const reportError = validateFileField('projectReport', files.projectReport)
+      if (reportError) errors.projectReport = reportError
     } else {
-      if (!formData.studentMobileNumber?.trim()) {
-        errors.studentMobileNumber = 'Student mobile number is required'
-      } else if (!/^\d{10}$/.test(formData.studentMobileNumber.trim())) {
-        errors.studentMobileNumber = 'Please enter a valid 10-digit mobile number'
-      }
-
-      if (!formData.mentorRole?.trim()) {
-        errors.mentorRole = 'Mentor role is required'
-      }
-
-      if (!formData.mentorContactNumber?.trim()) {
-        errors.mentorContactNumber = 'Mentor contact number is required'
-      } else if (!/^\d{10}$/.test(formData.mentorContactNumber.trim())) {
-        errors.mentorContactNumber = 'Please enter a valid 10-digit contact number'
-      }
-
-      if (!formData.companyFullAddress?.trim()) {
-        errors.companyFullAddress = 'Company full address is required'
-      } else if (formData.companyFullAddress.trim().length < 20) {
-        errors.companyFullAddress = 'Please provide complete address (minimum 20 characters)'
-      }
-
-      if (!formData.typeOfWork) {
-        errors.typeOfWork = 'Type of work is required'
-      }
-
-      if (!formData.internshipDomain?.trim()) {
-        errors.internshipDomain = 'Internship domain is required'
-      }
-      if (!formData.companyName?.trim()) {
-        errors.companyName = 'Company name is required'
-      }
-      if (!formData.companyType) {
-        errors.companyType = 'Company type is required'
-      }
-      if (!formData.internshipTitle?.trim()) {
-        errors.internshipTitle = 'Internship title is required'
-      } else if (formData.internshipTitle.trim().length < 5) {
-        errors.internshipTitle = 'Internship title must be at least 5 characters long'
-      } else if (formData.internshipTitle.trim().length > 100) {
-        errors.internshipTitle = 'Internship title must be less than 100 characters'
-      }
-      if (!formData.internshipType) {
-        errors.internshipType = 'Internship type is required'
-      }
-      if (!formData.startDate) {
-        errors.startDate = 'Start date is required'
-      }
-      if (!formData.endDate) {
-        errors.endDate = 'End date is required'
-      }
-
-      if (formData.startDate && formData.endDate) {
-        if (new Date(formData.endDate) <= new Date(formData.startDate)) {
-          errors.endDate = 'End date must be after start date'
-        }
-      }
-
-      if (!formData.mentorName?.trim()) {
-        errors.mentorName = 'Mentor name is required'
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!formData.mentorEmail || !emailRegex.test(formData.mentorEmail)) {
-        errors.mentorEmail = 'Valid mentor email is required'
-      }
-
-      if (!formData.hrName?.trim()) {
-        errors.hrName = 'HR name is required'
-      }
-
-      if (!formData.hrEmail || !emailRegex.test(formData.hrEmail)) {
-        errors.hrEmail = 'Valid HR email is required'
-      }
-
-      if (!files.offerLetter) {
-        errors.offerLetter = 'Offer letter is required'
-      }
-      if (!files.nocLetter) {
-        errors.nocLetter = 'NOC letter is required'
-      }
-
-      if (formData.hasStipend) {
-        if (!formData.stipendAmount || isNaN(formData.stipendAmount) || Number(formData.stipendAmount) <= 0) {
-          errors.stipendAmount = 'Valid stipend amount is required'
-        }
-        if (!files.stipendProof) {
-          errors.stipendProof = 'Stipend proof is required'
-        }
-      }
+      getActiveFields(formData).forEach((name) => {
+        const message = fieldValidators[name](formData[name], formData)
+        if (message) errors[name] = message
+      })
+      getActiveFileFields(formData).forEach((name) => {
+        const message = validateFileField(name, files[name])
+        if (message) errors[name] = message
+      })
     }
 
     setFormErrors(errors)
+    if (Object.keys(errors).length > 0) scrollToFirstError(errors)
     return Object.keys(errors).length === 0
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setSubmitError('')
 
-    // ─── NEW: hard block if uploads closed ────────────────────────────────────
+    // hard block if uploads closed
     if (!uploadsEnabled) {
       alert(uploadsClosedReason || 'Uploads are currently closed. Please contact your mentor.')
       return
@@ -222,35 +439,46 @@ const RegistrationForm = () => {
 
     try {
       const formDataToSend = new FormData()
-
       formDataToSend.append('semesterType', semesterType)
 
-      Object.keys(formData).forEach(key => {
-        const value = formData[key]
+      const payload = { ...formData }
+      Object.keys(payload).forEach((key) => {
+        if (typeof payload[key] === 'string') payload[key] = payload[key].trim()
+      })
+      payload.mentorEmail = payload.mentorEmail.toLowerCase()
+      payload.hrEmail = payload.hrEmail.toLowerCase()
+      if (payload.companyType !== 'other') delete payload.companyTypeOther
+      if (!payload.hasStipend) delete payload.stipendAmount
+      if (!isProjectType) {
+        delete payload.projectTitle
+        delete payload.projectType
+      }
+
+      Object.entries(payload).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           formDataToSend.append(key, value.toString())
         }
       })
 
-      Object.keys(files).forEach(key => {
-        if (files[key]) {
-          formDataToSend.append(key, files[key])
-        }
+      Object.entries(files).forEach(([key, file]) => {
+        if (!file) return
+        if (key === 'stipendProof' && !formData.hasStipend) return
+        formDataToSend.append(key, file)
       })
 
       setIsUploading(true)
       setUploadProgress(0)
       setSubmitPhase('uploading')
       try {
-        await execute(() => studentService.submitRegistration(formDataToSend, (percent) => {
-          setUploadProgress(percent)
-          // ── Real bytes finished sending, but server hasn't responded yet ──
-          // Switch to an indeterminate "processing" state instead of leaving
-          // a static 100% bar sitting there while the request is still pending.
-          if (percent >= 100) {
-            setSubmitPhase('processing')
-          }
-        }))
+        await execute(() =>
+          studentService.submitRegistration(formDataToSend, (percent) => {
+            setUploadProgress(percent)
+            // Bytes finished sending but server hasn't responded yet
+            if (percent >= 100) {
+              setSubmitPhase('processing')
+            }
+          })
+        )
       } finally {
         setIsUploading(false)
       }
@@ -260,48 +488,61 @@ const RegistrationForm = () => {
 
       if (error.response) {
         if (error.response.status === 403) {
-          // Uploads closed error came back from backend mid-flow
           setUploadsEnabled(false)
           setUploadsClosedReason(error.response.data?.message || 'Uploads are currently closed.')
           alert(error.response.data?.message || 'Uploads are currently closed. Please contact your mentor.')
           return
         }
-        if (error.response.data?.errors && Array.isArray(error.response.data.errors)) {
-          const errorDetails = error.response.data.errors.map(err => {
-            if (typeof err === 'object') {
-              return `${err.field || 'Unknown field'}: ${err.message || JSON.stringify(err)}`
+
+        const serverErrors = error.response.data?.errors
+        if (Array.isArray(serverErrors) && serverErrors.length > 0) {
+          const fieldErrors = {}
+          const general = []
+          serverErrors.forEach((err) => {
+            if (err && typeof err === 'object') {
+              const field = err.path || err.field
+              const message = err.msg || err.message || 'Invalid value'
+              if (field && field in formData && !fieldErrors[field]) fieldErrors[field] = message
+              else general.push(message)
+            } else {
+              general.push(String(err))
             }
-            return err.toString()
-          }).join('\n')
-          alert(`Validation Errors:\n${errorDetails}`)
+          })
+          setFormErrors((prev) => ({ ...prev, ...fieldErrors }))
+          if (Object.keys(fieldErrors).length > 0) scrollToFirstError(fieldErrors)
+          setSubmitError(
+            general.length > 0
+              ? general.join(' • ')
+              : 'Please correct the highlighted fields and try again.'
+          )
         } else {
-          const errorMessage = error.response.data?.message || 'Submission failed'
-          alert(`Submission Error: ${errorMessage}`)
+          setSubmitError(error.response.data?.message || 'Submission failed. Please try again.')
         }
       } else if (error.request) {
-        alert('Network Error: Unable to reach server. Please check if the server is running.')
+        setSubmitError('Unable to reach the server. Please check your internet connection and try again.')
       } else {
-        alert(`Error: ${error.message}`)
+        setSubmitError(error.message || 'Something went wrong. Please try again.')
       }
     }
   }
 
-  // ─── NEW: Uploads Closed screen — blocks everything ──────────────────────────
+  // ─── Uploads Closed screen ────────────────────────────────────────────────
   if (!checkingAccess && !uploadsEnabled) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8 px-4 flex items-center justify-center">
-        <div className="max-w-md mx-auto">
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center border border-gray-100">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Lock className="h-8 w-8 text-red-600" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
+        <div className="mx-auto w-full max-w-md">
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-red-50">
+              <Lock className="h-7 w-7 text-red-600" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Uploads Closed</h2>
-            <p className="text-gray-600 mb-8 leading-relaxed">
-              {uploadsClosedReason || 'Document uploads are currently unavailable. Please contact your mentor or administrator.'}
+            <h2 className="mb-2 text-xl font-semibold text-slate-900">Uploads Closed</h2>
+            <p className="mb-6 leading-relaxed text-slate-600">
+              {uploadsClosedReason ||
+                'Document uploads are currently unavailable. Please contact your mentor or administrator.'}
             </p>
             <button
               onClick={() => navigate('/student/dashboard')}
-              className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+              className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-800 px-6 text-sm font-semibold text-white transition hover:bg-slate-900"
             >
               Back to Dashboard
             </button>
@@ -313,30 +554,30 @@ const RegistrationForm = () => {
 
   if (show8thTypeSelection) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">8th Semester - Choose Your Path</h1>
-            <p className="text-gray-600">Select whether you want to do an internship or project</p>
+      <div className="min-h-screen bg-slate-50 px-4 py-8">
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-8 text-center">
+            <h1 className="mb-2 text-2xl font-semibold text-slate-900 sm:text-3xl">8th Semester - Choose Your Path</h1>
+            <p className="text-slate-600">Select whether you want to do an internship or project</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div
               onClick={() => setSelectedSubType('internship')}
-              className="cursor-pointer bg-white rounded-xl border-2 border-gray-200 hover:border-blue-500 p-8 text-center transition-all duration-300"
+              className="cursor-pointer rounded-xl border border-slate-200 bg-white p-8 text-center transition hover:border-blue-500"
             >
-              <Building className="h-12 w-12 text-blue-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Internship</h3>
-              <p className="text-gray-600">Industry internship with MPR submissions</p>
+              <Building className="mx-auto mb-4 h-12 w-12 text-blue-600" />
+              <h3 className="mb-2 text-xl font-semibold text-slate-900">Internship</h3>
+              <p className="text-slate-600">Industry internship with MPR submissions</p>
             </div>
 
             <div
               onClick={() => setSelectedSubType('project')}
-              className="cursor-pointer bg-white rounded-xl border-2 border-gray-200 hover:border-purple-500 p-8 text-center transition-all duration-300"
+              className="cursor-pointer rounded-xl border border-slate-200 bg-white p-8 text-center transition hover:border-blue-500"
             >
-              <Code className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Project</h3>
-              <p className="text-gray-600">Research/development project with final report</p>
+              <Code className="mx-auto mb-4 h-12 w-12 text-blue-600" />
+              <h3 className="mb-2 text-xl font-semibold text-slate-900">Project</h3>
+              <p className="text-slate-600">Research/development project with final report</p>
             </div>
           </div>
         </div>
@@ -344,480 +585,388 @@ const RegistrationForm = () => {
     )
   }
 
+  const busy = loading || isUploading
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mx-auto max-w-4xl">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {isProjectType ? 'Project Registration' : 'Internship Registration'}
-              </h1>
-              <p className="text-gray-600">
-                {semesterType.replace('_', ' ').toUpperCase()} - Complete your registration details
-              </p>
-            </div>
-            <button
-              onClick={() => navigate('/student/choice')}
-              className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-900 rounded-lg"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </button>
+        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+              {semesterType.replace('_', ' ').toUpperCase()}
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              {isProjectType ? 'Project Registration' : 'Internship Registration'}
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Complete your registration details. Fields marked <span className="text-red-500">*</span> are required.
+            </p>
           </div>
-        </div>
+          <button
+            type="button"
+            onClick={() => navigate('/student/choice')}
+            className="inline-flex h-10 items-center self-start rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 sm:self-auto"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </button>
+        </header>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} noValidate className="space-y-6">
           {isProjectType ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
-                <h3 className="text-xl font-semibold text-white">Project Details</h3>
-              </div>
-              <div className="p-8 space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Project Title <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="projectTitle"
-                    value={formData.projectTitle}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    placeholder="Enter your project title"
-                  />
-                  {formErrors.projectTitle && <p className="text-red-600 text-sm mt-1">{formErrors.projectTitle}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Project Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="projectType"
-                    value={formData.projectType}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  >
-                    <option value="">Select Project Type</option>
-                    <option value="software">Software</option>
-                    <option value="hardware">Hardware</option>
-                    <option value="software_hardware">Software & Hardware</option>
-                    <option value="experimental">Experimental</option>
-                  </select>
-                  {formErrors.projectType && <p className="text-red-600 text-sm mt-1">{formErrors.projectType}</p>}
-                </div>
-
-                <div>
+            <SectionCard icon={Code} title="Project Details">
+              <div className="space-y-5">
+                <Field name="projectTitle" label="Project Title" required error={formErrors.projectTitle}>
+                  <input type="text" {...bind('projectTitle')} placeholder="Enter your project title" />
+                </Field>
+                <Field name="projectType" label="Project Type" required error={formErrors.projectType}>
+                  <Select {...bind('projectType')} placeholder="Select project type" options={PROJECT_TYPE_OPTIONS} />
+                </Field>
+                <div id="field-projectReport">
                   <FileUpload
                     onFileSelect={(file) => handleFileSelect('projectReport', file)}
                     accept=".pdf"
                     allowedTypes={['pdf']}
+                    maxSize={MAX_FILE_SIZE}
                     label="Project Report Document"
                     required
                     error={formErrors.projectReport}
                   />
                 </div>
               </div>
-            </div>
+            </SectionCard>
           ) : (
             <>
               {/* Company Information */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
-                  <h3 className="text-xl font-semibold text-white">Company Information</h3>
+              <SectionCard
+                icon={Building2}
+                title="Company Information"
+                description="Details of the organisation where you will be interning."
+              >
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                  <Field name="companyName" label="Company Name" required error={formErrors.companyName}>
+                    <input
+                      type="text"
+                      {...bind('companyName')}
+                      maxLength={100}
+                      autoComplete="organization"
+                      placeholder="Enter company name"
+                    />
+                  </Field>
+
+                  <Field name="companyType" label="Company Type" required error={formErrors.companyType}>
+                    <Select {...bind('companyType')} placeholder="Select type" options={COMPANY_TYPE_OPTIONS} />
+                  </Field>
+
+                  {formData.companyType === 'other' && (
+                    <Field
+                      name="companyTypeOther"
+                      label="Specify Company Type"
+                      required
+                      error={formErrors.companyTypeOther}
+                      className="md:col-span-2"
+                    >
+                      <input
+                        type="text"
+                        {...bind('companyTypeOther')}
+                        maxLength={50}
+                        placeholder="e.g., NGO, Consulting Firm, Healthcare"
+                      />
+                    </Field>
+                  )}
+
+                  <Field
+                    name="companyFullAddress"
+                    label="Company Full Address"
+                    required
+                    error={formErrors.companyFullAddress}
+                    hint="Include building, street, city, state and PIN code."
+                    className="md:col-span-2"
+                  >
+                    <textarea
+                      rows={3}
+                      {...bind('companyFullAddress')}
+                      maxLength={300}
+                      placeholder="e.g., TechnoDuxx Pvt Ltd., Plot No. 9, Aditya Avenue, Airport Road, Bhopal, Madhya Pradesh 462080"
+                    />
+                  </Field>
+
+                  <Field name="typeOfWork" label="Type of Work" required error={formErrors.typeOfWork}>
+                    <Select {...bind('typeOfWork')} placeholder="Select work type" options={WORK_TYPE_OPTIONS} />
+                  </Field>
+
+                  <Field name="internshipType" label="Internship Type" required error={formErrors.internshipType}>
+                    <Select {...bind('internshipType')} placeholder="Select type" options={INTERNSHIP_TYPE_OPTIONS} />
+                  </Field>
+
+                  <Field name="internshipDomain" label="Internship Domain" required error={formErrors.internshipDomain}>
+                    <input
+                      type="text"
+                      {...bind('internshipDomain')}
+                      maxLength={100}
+                      placeholder="e.g., Web Development, AI/ML, Data Science"
+                    />
+                  </Field>
+
+                  <Field
+                    name="internshipTitle"
+                    label="Internship Title"
+                    required
+                    error={formErrors.internshipTitle}
+                    hint="Between 5 and 100 characters."
+                  >
+                    <input
+                      type="text"
+                      {...bind('internshipTitle')}
+                      maxLength={100}
+                      placeholder="Enter internship title"
+                    />
+                  </Field>
                 </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Company Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="companyName"
-                        value={formData.companyName}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter company name"
-                      />
-                      {formErrors.companyName && <p className="text-red-600 text-sm mt-1">{formErrors.companyName}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Company Type <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="companyType"
-                        value={formData.companyType}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Type</option>
-                        <option value="startup">Startup</option>
-                        <option value="mnc">MNC</option>
-                        <option value="government">Government</option>
-                        <option value="psu">PSU</option>
-                        <option value="academic_institute">Academic Institute</option>
-                        <option value="research">Research</option>
-                        <option value="other">Other</option>
-                      </select>
-                      {formErrors.companyType && <p className="text-red-600 text-sm mt-1">{formErrors.companyType}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Company Full Address <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="companyFullAddress"
-                        value={formData.companyFullAddress}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., TechnoDuxx Pvt Ltd., Plot No. 9, Aditya Avenue, Airport Road, Bhopal, Madhya Pradesh 462080"
-                      />
-                      {formErrors.companyFullAddress && <p className="text-red-600 text-sm mt-1">{formErrors.companyFullAddress}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Type of Work <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="typeOfWork"
-                        value={formData.typeOfWork}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Work Type</option>
-                        <option value="software">Software</option>
-                        <option value="hardware">Hardware</option>
-                        <option value="product_development">Product Development</option>
-                        <option value="software_hardware">Software & Hardware</option>
-                        <option value="experiment_based">Experiment Based</option>
-                        <option value="testing_based">Testing Based</option>
-                        <option value="case_study">Case Study</option>
-                        <option value="other">Other</option>
-                      </select>
-                      {formErrors.typeOfWork && <p className="text-red-600 text-sm mt-1">{formErrors.typeOfWork}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Internship Domain <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="internshipDomain"
-                        value={formData.internshipDomain}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., Web Development, AI/ML, Data Science, Mobile App Development"
-                      />
-                      {formErrors.internshipDomain && <p className="text-red-600 text-sm mt-1">{formErrors.internshipDomain}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Internship Title <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="internshipTitle"
-                        value={formData.internshipTitle}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter internship title (min 5 characters)"
-                      />
-                      {formErrors.internshipTitle && <p className="text-red-600 text-sm mt-1">{formErrors.internshipTitle}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Internship Type <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="internshipType"
-                        value={formData.internshipType}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select Type</option>
-                        <option value="remote">Remote</option>
-                        <option value="onsite">On-site</option>
-                        <option value="hybrid">Hybrid</option>
-                      </select>
-                      {formErrors.internshipType && <p className="text-red-600 text-sm mt-1">{formErrors.internshipType}</p>}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              </SectionCard>
 
               {/* Duration */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-green-600 to-green-700 p-6">
-                  <h3 className="text-xl font-semibold text-white">Duration & Dates</h3>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Start Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        name="startDate"
-                        value={formData.startDate}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                      {formErrors.startDate && <p className="text-red-600 text-sm mt-1">{formErrors.startDate}</p>}
-                    </div>
+              <SectionCard icon={Calendar} title="Duration & Dates" description="The official start and end dates of your internship.">
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                  <Field name="startDate" label="Start Date" required error={formErrors.startDate}>
+                    <input type="date" {...bind('startDate')} min="2000-01-01" max="2100-12-31" />
+                  </Field>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        End Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        name="endDate"
-                        value={formData.endDate}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      />
-                      {formErrors.endDate && <p className="text-red-600 text-sm mt-1">{formErrors.endDate}</p>}
-                    </div>
-                  </div>
+                  <Field name="endDate" label="End Date" required error={formErrors.endDate}>
+                    <input
+                      type="date"
+                      {...bind('endDate')}
+                      min={formData.startDate || '2000-01-01'}
+                      max="2100-12-31"
+                    />
+                  </Field>
                 </div>
-              </div>
+              </SectionCard>
 
               {/* Stipend */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-yellow-600 to-orange-600 p-6">
-                  <h3 className="text-xl font-semibold text-white">Stipend Information</h3>
-                </div>
-                <div className="p-8">
-                  <div className="mb-6">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="hasStipend"
-                        checked={formData.hasStipend}
-                        onChange={handleChange}
-                        className="mr-3 w-5 h-5 text-yellow-600"
-                      />
-                      <span className="text-sm font-semibold text-gray-700">This internship offers stipend</span>
-                    </label>
-                  </div>
+              <SectionCard icon={IndianRupee} title="Stipend Information" description="Let us know if this internship is paid.">
+                <label
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
+                    formData.hasStipend ? 'border-blue-300 bg-blue-50/60' : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="hasStipend"
+                    checked={formData.hasStipend}
+                    onChange={handleChange}
+                    className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 accent-blue-700"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-slate-900">This internship offers a stipend</span>
+                    <span className="block text-sm text-slate-500">
+                      Select this to enter the amount and upload a proof document.
+                    </span>
+                  </span>
+                </label>
 
-                  {formData.hasStipend && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Stipend Amount (₹) <span className="text-red-500">*</span>
-                        </label>
+                {formData.hasStipend && (
+                  <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                    <Field name="stipendAmount" label="Stipend Amount (₹)" required error={formErrors.stipendAmount}>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-500">
+                          ₹
+                        </span>
                         <input
-                          type="number"
-                          name="stipendAmount"
-                          value={formData.stipendAmount}
-                          onChange={handleChange}
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                          type="text"
+                          inputMode="numeric"
+                          {...bind('stipendAmount')}
+                          className={`${inputClass(Boolean(formErrors.stipendAmount))} pl-8`}
                           placeholder="Enter stipend amount"
                         />
-                        {formErrors.stipendAmount && <p className="text-red-600 text-sm mt-1">{formErrors.stipendAmount}</p>}
                       </div>
+                    </Field>
 
-                      <div>
-                        <FileUpload
-                          onFileSelect={(file) => handleFileSelect('stipendProof', file)}
-                          accept=".pdf"
-                          allowedTypes={['pdf']}
-                          label="Stipend Proof Document"
-                          required
-                          error={formErrors.stipendProof}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Mentor Details */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-purple-600 to-purple-700 p-6">
-                  <h3 className="text-xl font-semibold text-white">Mentor & HR Details</h3>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Industry Mentor Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="mentorName"
-                        value={formData.mentorName}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Enter mentor name"
+                    <div id="field-stipendProof">
+                      <FileUpload
+                        onFileSelect={(file) => handleFileSelect('stipendProof', file)}
+                        accept=".pdf"
+                        allowedTypes={['pdf']}
+                        maxSize={MAX_FILE_SIZE}
+                        label="Stipend Proof Document"
+                        required
+                        error={formErrors.stipendProof}
                       />
-                      {formErrors.mentorName && <p className="text-red-600 text-sm mt-1">{formErrors.mentorName}</p>}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Student Mobile Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        name="studentMobileNumber"
-                        value={formData.studentMobileNumber}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Enter your mobile number"
-                      />
-                      {formErrors.studentMobileNumber && <p className="text-red-600 text-sm mt-1">{formErrors.studentMobileNumber}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Industry Mentor Role in Company <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="mentorRole"
-                        value={formData.mentorRole}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="e.g., Senior Software Engineer, Team Lead, Project Manager"
-                      />
-                      {formErrors.mentorRole && <p className="text-red-600 text-sm mt-1">{formErrors.mentorRole}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Industry Mentor Contact Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        name="mentorContactNumber"
-                        value={formData.mentorContactNumber}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Enter mentor's contact number"
-                      />
-                      {formErrors.mentorContactNumber && <p className="text-red-600 text-sm mt-1">{formErrors.mentorContactNumber}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Industry Mentor Email <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        name="mentorEmail"
-                        value={formData.mentorEmail}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="mentor@company.com"
-                      />
-                      {formErrors.mentorEmail && <p className="text-red-600 text-sm mt-1">{formErrors.mentorEmail}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        HR Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="hrName"
-                        value={formData.hrName}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Enter HR name"
-                      />
-                      {formErrors.hrName && <p className="text-red-600 text-sm mt-1">{formErrors.hrName}</p>}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        HR Email <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        name="hrEmail"
-                        value={formData.hrEmail}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="hr@company.com"
-                      />
-                      {formErrors.hrEmail && <p className="text-red-600 text-sm mt-1">{formErrors.hrEmail}</p>}
                     </div>
                   </div>
+                )}
+              </SectionCard>
+
+              {/* Mentor, HR & Student contact */}
+              <SectionCard
+                icon={Users}
+                title="Mentor & HR Details"
+                description="Contact details we may use to verify your internship."
+              >
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                  <SubHeading>Industry Mentor</SubHeading>
+
+                  <Field name="mentorName" label="Industry Mentor Name" required error={formErrors.mentorName}>
+                    <input type="text" {...bind('mentorName')} maxLength={50} placeholder="Enter mentor name" />
+                  </Field>
+
+                  <Field name="mentorRole" label="Industry Mentor Role in Company" required error={formErrors.mentorRole}>
+                    <input
+                      type="text"
+                      {...bind('mentorRole')}
+                      maxLength={100}
+                      placeholder="e.g., Senior Software Engineer, Team Lead"
+                    />
+                  </Field>
+
+                  <Field name="mentorEmail" label="Industry Mentor Email" required error={formErrors.mentorEmail}>
+                    <input
+                      type="email"
+                      {...bind('mentorEmail')}
+                      maxLength={254}
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="mentor@company.com"
+                    />
+                  </Field>
+
+                  <Field
+                    name="mentorContactNumber"
+                    label="Industry Mentor Contact Number"
+                    required
+                    error={formErrors.mentorContactNumber}
+                    hint="10-digit mobile number."
+                  >
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      {...bind('mentorContactNumber')}
+                      autoComplete="off"
+                      placeholder="Enter mentor's contact number"
+                    />
+                  </Field>
+
+                  <SubHeading>HR Contact</SubHeading>
+
+                  <Field name="hrName" label="HR Name" required error={formErrors.hrName}>
+                    <input type="text" {...bind('hrName')} maxLength={50} placeholder="Enter HR name" />
+                  </Field>
+
+                  <Field name="hrEmail" label="HR Email" required error={formErrors.hrEmail}>
+                    <input
+                      type="email"
+                      {...bind('hrEmail')}
+                      maxLength={254}
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="hr@company.com"
+                    />
+                  </Field>
+
+                  <SubHeading>Your Contact</SubHeading>
+
+                  <Field
+                    name="studentMobileNumber"
+                    label="Student Mobile Number"
+                    required
+                    error={formErrors.studentMobileNumber}
+                    hint="10-digit mobile number."
+                  >
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      {...bind('studentMobileNumber')}
+                      autoComplete="tel-national"
+                      placeholder="Enter your mobile number"
+                    />
+                  </Field>
                 </div>
-              </div>
+              </SectionCard>
 
               {/* Documents */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-red-600 to-pink-600 p-6">
-                  <h3 className="text-xl font-semibold text-white">Required Documents</h3>
+              <SectionCard
+                icon={FileText}
+                title="Required Documents"
+                description="Upload clear, readable copies of the documents below."
+              >
+                <div className="mb-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-sm text-slate-600">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <p>
+                    Each file must be <span className="font-medium text-slate-800">2 MB or smaller</span>. Offer letter,
+                    NOC and stipend proof must be PDF. The synopsis can be PDF or PPT/PPTX.
+                  </p>
                 </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <FileUpload
-                        onFileSelect={(file) => handleFileSelect('offerLetter', file)}
-                        accept=".pdf"
-                        allowedTypes={['pdf']}
-                        label="Offer Letter"
-                        required
-                        error={formErrors.offerLetter}
-                      />
-                    </div>
 
-                    <div>
-                      <FileUpload
-                        onFileSelect={(file) => handleFileSelect('nocLetter', file)}
-                        accept=".pdf"
-                        allowedTypes={['pdf']}
-                        label="NOC Letter"
-                        required
-                        error={formErrors.nocLetter}
-                      />
-                    </div>
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                  <div id="field-offerLetter">
+                    <FileUpload
+                      onFileSelect={(file) => handleFileSelect('offerLetter', file)}
+                      accept=".pdf"
+                      allowedTypes={['pdf']}
+                      maxSize={MAX_FILE_SIZE}
+                      label="Offer Letter"
+                      required
+                      error={formErrors.offerLetter}
+                    />
+                  </div>
+
+                  <div id="field-nocLetter">
+                    <FileUpload
+                      onFileSelect={(file) => handleFileSelect('nocLetter', file)}
+                      accept=".pdf"
+                      allowedTypes={['pdf']}
+                      maxSize={MAX_FILE_SIZE}
+                      label="NOC Letter"
+                      required
+                      error={formErrors.nocLetter}
+                    />
+                  </div>
+
+                  <div id="field-synopsisPPT" className="md:col-span-2">
+                    <FileUpload
+                      onFileSelect={(file) => handleFileSelect('synopsisPPT', file)}
+                      accept=".pdf,.ppt,.pptx"
+                      allowedTypes={['pdf', 'ppt', 'pptx']}
+                      maxSize={MAX_FILE_SIZE}
+                      label="Internship Synopsis (PDF / PPT)"
+                      required
+                      error={formErrors.synopsisPPT}
+                    />
                   </div>
                 </div>
-              </div>
+              </SectionCard>
             </>
           )}
 
           {isUploading && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               {submitPhase === 'uploading' ? (
                 <>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Uploading documents...</span>
-                    <span className="text-sm font-semibold text-blue-600">{uploadProgress}%</span>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-700">Uploading documents...</span>
+                    <span className="text-sm font-semibold text-blue-700">{uploadProgress}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
                     <div
-                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                      className="h-2.5 rounded-full bg-blue-700 transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Files uploaded — processing your submission...</span>
-                    <span className="text-sm font-semibold text-green-600">Almost done</span>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-slate-700">
+                      Files uploaded — processing your submission...
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold text-green-600">Almost done</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                    {/* Indeterminate bar — honest signal that upload is done but the
-                        server is still working, instead of a static, misleading 100% */}
-                    <div className="bg-blue-600 h-2.5 rounded-full w-1/3 animate-[indeterminate_1.2s_ease-in-out_infinite]" />
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    {/* Indeterminate bar: upload finished, server still working */}
+                    <div className="h-2.5 w-1/3 animate-[indeterminate_1.2s_ease-in-out_infinite] rounded-full bg-blue-700" />
                   </div>
                   <style>{`
                     @keyframes indeterminate {
@@ -831,24 +980,38 @@ const RegistrationForm = () => {
             </div>
           )}
 
-          {/* Submit Button */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-            <div className="flex flex-col sm:flex-row justify-end space-y-4 sm:space-y-0 sm:space-x-4">
+          {submitError && (
+            <div
+              ref={submitErrorRef}
+              role="alert"
+              className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+            >
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+              <div>
+                <p className="font-semibold">We couldn&apos;t submit your registration</p>
+                <p className="mt-0.5">{submitError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Action bar — sticks to bottom on mobile */}
+          <div className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:rounded-xl sm:border sm:p-5 sm:shadow-sm">
+            <div className="flex gap-3 sm:justify-end">
               <button
                 type="button"
                 onClick={() => navigate('/student/choice')}
-                className="px-8 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50"
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:flex-none"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={loading || !uploadsEnabled}
-                className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[200px]"
+                disabled={busy || !uploadsEnabled}
+                className="inline-flex h-11 flex-[2] items-center justify-center rounded-lg bg-blue-700 px-6 text-sm font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[200px] sm:flex-none"
               >
-                {loading ? (
+                {busy ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
+                    <div className="mr-3 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                     {submitPhase === 'processing' ? 'Processing...' : 'Submitting...'}
                   </>
                 ) : (
@@ -860,15 +1023,16 @@ const RegistrationForm = () => {
         </form>
 
         {/* Info Box */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 mt-8">
-          <div className="flex items-start">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mr-4">
-              <Info className="h-5 w-5 text-blue-600" />
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+              <Info className="h-5 w-5 text-blue-700" />
             </div>
             <div>
-              <h4 className="text-lg font-semibold text-blue-900 mb-2">What happens next?</h4>
-              <p className="text-blue-800 leading-relaxed">
-                Your registration will be reviewed by your assigned mentor. Once approved, you'll be able to proceed with the next steps based on your semester type.
+              <h4 className="text-base font-semibold text-slate-900">What happens next?</h4>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                Your registration will be reviewed by your assigned mentor. Once approved, you&apos;ll be able to proceed
+                with the next steps based on your semester type.
               </p>
             </div>
           </div>

@@ -34,7 +34,7 @@ const storage = multer.diskStorage({
   }
 });
 
-// ─── File filter ─────────────────────────────────────────────────────────────
+// ─── File filter (general) ───────────────────────────────────────────────────
 const fileFilter = (req, file, cb) => {
   const allowedMimes = [
     'application/pdf',
@@ -52,7 +52,36 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// ─── Multer instance ──────────────────────────────────────────────────────────
+// ─── Registration-specific file filter ───────────────────────────────────────
+// Documents: PDF only. Synopsis (synopsisPPT): PDF, PPT or PPTX.
+const PDF_MIME = 'application/pdf';
+const PPT_MIMES = [
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+];
+
+const registrationFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const isSynopsis = file.fieldname === 'synopsisPPT';
+
+  const allowedExts = isSynopsis ? ['.pdf', '.ppt', '.pptx'] : ['.pdf'];
+  const allowedMimes = isSynopsis ? [PDF_MIME, ...PPT_MIMES] : [PDF_MIME];
+
+  if (allowedExts.includes(ext) && allowedMimes.includes(file.mimetype)) {
+    return cb(null, true);
+  }
+
+  cb(
+    new Error(
+      isSynopsis
+        ? 'Invalid file type. Internship synopsis must be a PDF, PPT or PPTX file.'
+        : 'Invalid file type. Only PDF files are allowed for this document.'
+    ),
+    false
+  );
+};
+
+// ─── Multer instances ─────────────────────────────────────────────────────────
 const upload = multer({
   storage,
   fileFilter,
@@ -62,12 +91,27 @@ const upload = multer({
   }
 });
 
+// Registration form: 2 MB per file
+const REGISTRATION_MAX_FILE_SIZE = 2 * 1024 * 1024;
+const registrationUpload = multer({
+  storage,
+  fileFilter: registrationFileFilter,
+  limits: {
+    fileSize: REGISTRATION_MAX_FILE_SIZE,
+    files: 5
+  }
+});
+
 // ─── Error handler middleware ─────────────────────────────────────────────────
 const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
+    const isRegistration = (req.originalUrl || '').includes('/submit/registration');
+    const maxMB = isRegistration ? REGISTRATION_MAX_FILE_SIZE / (1024 * 1024) : 10;
+    const maxFiles = isRegistration ? 5 : 10;
+
     const messages = {
-      LIMIT_FILE_SIZE: 'File size too large. Maximum is 10MB.',
-      LIMIT_FILE_COUNT: 'Too many files. Maximum 10 files allowed.',
+      LIMIT_FILE_SIZE: `File size too large. Maximum is ${maxMB}MB per file.`,
+      LIMIT_FILE_COUNT: `Too many files. Maximum ${maxFiles} files allowed.`,
       LIMIT_UNEXPECTED_FILE: 'Unexpected file field name.'
     };
     return res.status(400).json({
@@ -92,4 +136,4 @@ const getFileUrl = (filePath) => {
   return '/' + normalized;
 };
 
-module.exports = { upload, handleUploadError, getFileUrl };
+module.exports = { upload, registrationUpload, handleUploadError, getFileUrl };

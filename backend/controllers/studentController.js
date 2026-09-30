@@ -184,13 +184,15 @@ const submitRegistration = async (req, res) => {
       currentStep: { $ne: 'completed' }
     });
 
+    // A rejected submission is replaced only after the new one is ready to save
+    let rejectedToReplace = null;
     if (activeSubmission) {
       if (activeSubmission.registrationReview?.status !== 'rejected' &&
         activeSubmission.currentStep !== 'registration_rejected') {
         cleanupFiles(req);
         return errorResponse(res, 'You have an active submission in progress. Please complete it first.', 400);
       }
-      await Submission.findByIdAndDelete(activeSubmission._id);
+      rejectedToReplace = activeSubmission;
     }
 
     const canRegister = await Submission.canRegisterForSemester(studentId, semesterType);
@@ -222,6 +224,28 @@ const submitRegistration = async (req, res) => {
       return errorResponse(res, 'Failed to upload documents to Drive. Please try again or contact your mentor.', 500);
     }
 
+    const stipendRequested =
+      bodyData.hasStipend === 'true' || bodyData.hasStipend === true ||
+      (bodyData.stipendAmount && Number(bodyData.stipendAmount) > 0);
+
+    // ─── make sure every required document really reached Drive ─────────
+    if (semesterType !== '8th_project') {
+      const missingDocs = [];
+      if (!fileUrls.offerLetter) missingDocs.push('Offer letter');
+      if (!fileUrls.nocLetter && !fileUrls.noc) missingDocs.push('NOC letter');
+      if (!fileUrls.synopsisPPT) missingDocs.push('Internship synopsis');
+      if (stipendRequested && !fileUrls.stipendProof) missingDocs.push('Stipend proof');
+
+      if (missingDocs.length > 0) {
+        cleanupFiles(req);
+        return errorResponse(
+          res,
+          `Failed to upload: ${missingDocs.join(', ')}. Please try again.`,
+          500
+        );
+      }
+    }
+
     // ── Build clean registration data ─────────────────────────────────────────
     const cleanedData = {};
 
@@ -237,16 +261,24 @@ const submitRegistration = async (req, res) => {
         'companyFullAddress', 'typeOfWork', 'internshipDomain'
       ];
       internshipFields.forEach(field => {
-        if (bodyData[field] !== undefined) cleanedData[field] = bodyData[field];
+        if (bodyData[field] !== undefined) {
+          cleanedData[field] = typeof bodyData[field] === 'string' ? bodyData[field].trim() : bodyData[field];
+        }
       });
+
+      // Custom company type, only kept when "Other" is selected
+      if (cleanedData.companyType === 'other' && bodyData.companyTypeOther) {
+        cleanedData.companyTypeOther = String(bodyData.companyTypeOther).trim();
+      }
+
+      if (cleanedData.mentorEmail) cleanedData.mentorEmail = cleanedData.mentorEmail.toLowerCase();
+      if (cleanedData.hrEmail) cleanedData.hrEmail = cleanedData.hrEmail.toLowerCase();
 
       if (fileUrls.offerLetter) cleanedData.offerLetter = fileUrls.offerLetter;
       if (fileUrls.noc || fileUrls.nocLetter) cleanedData.nocLetter = fileUrls.noc || fileUrls.nocLetter;
+      if (fileUrls.synopsisPPT) cleanedData.synopsisPPT = fileUrls.synopsisPPT;
 
-      cleanedData.hasStipend = Boolean(
-        bodyData.hasStipend === 'true' || bodyData.hasStipend === true ||
-        (bodyData.stipendAmount && Number(bodyData.stipendAmount) > 0)
-      );
+      cleanedData.hasStipend = Boolean(stipendRequested);
 
       if (cleanedData.hasStipend) {
         const amount = bodyData.stipendAmount || bodyData.stipendPerMonth;
@@ -260,6 +292,11 @@ const submitRegistration = async (req, res) => {
       const mentorWithBranch = await User.findById(student.assignedMentor._id)
         .populate('branch', 'name')
       branchName = mentorWithBranch?.branch?.name || ''
+    }
+
+    // Everything succeeded, so it is now safe to drop the rejected submission
+    if (rejectedToReplace) {
+      await Submission.findByIdAndDelete(rejectedToReplace._id);
     }
 
     const submission = new Submission({

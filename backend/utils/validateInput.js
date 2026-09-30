@@ -1,9 +1,23 @@
 const { body, validationResult } = require('express-validator');
+const fs = require('fs');
+
+// Delete files multer already saved to disk when a request is rejected
+const cleanupUploadedFiles = (req) => {
+  const uploaded = [];
+  if (req.file) uploaded.push(req.file);
+  if (req.files) {
+    uploaded.push(...(Array.isArray(req.files) ? req.files : Object.values(req.files).flat()));
+  }
+  uploaded.forEach((f) => {
+    if (f && f.path) fs.unlink(f.path, () => {});
+  });
+};
 
 // Helper function to check validation errors
 const checkValidationResult = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    cleanupUploadedFiles(req);
     return res.status(400).json({
       success: false,
       message: 'Validation failed',
@@ -82,6 +96,25 @@ const validateMentorUpdate = [
 ];
 
 // Validate registration submission based on semester type
+// Validate registration submission based on semester type
+const COMPANY_TYPES = ['startup', 'mnc', 'government', 'psu', 'academic_institute', 'research', 'other'];
+const INTERNSHIP_TYPES = ['remote', 'onsite', 'hybrid'];
+const WORK_TYPES = [
+  'software', 'hardware', 'product_development', 'software_hardware',
+  'experiment_based', 'testing_based', 'case_study', 'other'
+];
+const MOBILE_REGEX = /^[6-9]\d{9}$/;
+const PERSON_NAME_REGEX = /^\p{L}[\p{L} .'-]{1,49}$/u;
+
+const isTrue = (v) => v === true || v === 'true';
+const lower = (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v);
+const validYear = (value) => {
+  const y = new Date(value).getFullYear();
+  return y >= 2000 && y <= 2100;
+};
+// Fresh chain each time so it can safely be used as an .if() condition
+const internshipOnly = () => body('semesterType').not().equals('8th_project');
+
 const validateRegistrationSubmission = [
   body('semesterType')
     .notEmpty()
@@ -89,44 +122,96 @@ const validateRegistrationSubmission = [
     .isIn(['8th_internship', 'any_internship'])
     .withMessage('Invalid semester type'),
 
-  // Common fields for internships
+  // ─── Company information ────────────────────────────────────────────────
   body('companyName')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .trim()
     .notEmpty()
     .withMessage('Company name is required')
     .isLength({ min: 2, max: 100 })
     .withMessage('Company name must be between 2-100 characters'),
 
   body('companyType')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .trim()
     .notEmpty()
-    .withMessage('Company type is required'),
+    .withMessage('Company type is required')
+    .bail()
+    .isIn(COMPANY_TYPES)
+    .withMessage('Invalid company type'),
+
+  body('companyTypeOther')
+    .if(body('companyType').equals('other'))
+    .trim()
+    .notEmpty()
+    .withMessage('Please specify the company type')
+    .isLength({ min: 2, max: 50 })
+    .withMessage('Company type must be between 2-50 characters'),
+
+  body('companyFullAddress')
+    .if(internshipOnly())
+    .trim()
+    .notEmpty()
+    .withMessage('Company address is required')
+    .isLength({ min: 20, max: 300 })
+    .withMessage('Company address must be between 20-300 characters'),
+
+  body('typeOfWork')
+    .if(internshipOnly())
+    .trim()
+    .notEmpty()
+    .withMessage('Type of work is required')
+    .bail()
+    .isIn(WORK_TYPES)
+    .withMessage('Invalid type of work'),
+
+  body('internshipDomain')
+    .if(internshipOnly())
+    .trim()
+    .notEmpty()
+    .withMessage('Internship domain is required')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Internship domain must be between 2-100 characters'),
 
   body('internshipType')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .trim()
     .notEmpty()
-    .withMessage('Internship type is required'),
+    .withMessage('Internship type is required')
+    .bail()
+    .isIn(INTERNSHIP_TYPES)
+    .withMessage('Invalid internship type'),
 
   body('internshipTitle')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .trim()
     .notEmpty()
     .withMessage('Internship title is required')
     .isLength({ min: 5, max: 100 })
     .withMessage('Internship title must be between 5-100 characters'),
 
+  // ─── Dates ──────────────────────────────────────────────────────────────
   body('startDate')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
     .notEmpty()
     .withMessage('Start date is required')
+    .bail()
     .isISO8601()
-    .withMessage('Invalid start date format'),
+    .withMessage('Invalid start date format')
+    .bail()
+    .custom(validYear)
+    .withMessage('Start date is out of range'),
 
   body('endDate')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
     .notEmpty()
     .withMessage('End date is required')
+    .bail()
     .isISO8601()
     .withMessage('Invalid end date format')
+    .bail()
+    .custom(validYear)
+    .withMessage('End date is out of range')
     .custom((value, { req }) => {
       if (new Date(value) <= new Date(req.body.startDate)) {
         throw new Error('End date must be after start date');
@@ -134,45 +219,102 @@ const validateRegistrationSubmission = [
       return true;
     }),
 
+  // ─── Stipend ────────────────────────────────────────────────────────────
   body('hasStipend')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
     .isBoolean()
     .withMessage('Stipend status must be boolean'),
 
   body('stipendAmount')
-    .if((value, { req }) => req.body.hasStipend === 'true' || req.body.hasStipend === true)
+    .if((value, { req }) => isTrue(req.body.hasStipend))
+    .trim()
     .notEmpty()
     .withMessage('Stipend amount is required when stipend is available')
-    .isNumeric()
-    .withMessage('Stipend amount must be numeric'),
+    .bail()
+    .isFloat({ min: 1, max: 1000000 })
+    .withMessage('Stipend amount must be a number between 1 and 1,000,000'),
 
+  // ─── Mentor / HR / Student contact ──────────────────────────────────────
   body('mentorName')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .trim()
     .notEmpty()
     .withMessage('Mentor name is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Mentor name must be between 2-50 characters'),
+    .bail()
+    .matches(PERSON_NAME_REGEX)
+    .withMessage('Mentor name must be 2-50 letters (spaces, . \' - allowed)'),
+
+  body('mentorRole')
+    .if(internshipOnly())
+    .trim()
+    .notEmpty()
+    .withMessage('Mentor role is required')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Mentor role must be between 2-100 characters'),
 
   body('mentorEmail')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .customSanitizer(lower)
     .notEmpty()
     .withMessage('Mentor email is required')
+    .bail()
     .isEmail()
-    .withMessage('Invalid mentor email format'),
+    .withMessage('Invalid mentor email format')
+    .isLength({ max: 254 })
+    .withMessage('Mentor email is too long'),
+
+  body('mentorContactNumber')
+    .if(internshipOnly())
+    .trim()
+    .notEmpty()
+    .withMessage('Mentor contact number is required')
+    .bail()
+    .matches(MOBILE_REGEX)
+    .withMessage('Mentor contact number must be a valid 10-digit mobile number'),
 
   body('hrName')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .trim()
     .notEmpty()
     .withMessage('HR name is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('HR name must be between 2-50 characters'),
+    .bail()
+    .matches(PERSON_NAME_REGEX)
+    .withMessage('HR name must be 2-50 letters (spaces, . \' - allowed)'),
 
   body('hrEmail')
-    .if(body('semesterType').not().equals('8th_project'))
+    .if(internshipOnly())
+    .customSanitizer(lower)
     .notEmpty()
     .withMessage('HR email is required')
+    .bail()
     .isEmail()
-    .withMessage('Invalid HR email format'),
+    .withMessage('Invalid HR email format')
+    .isLength({ max: 254 })
+    .withMessage('HR email is too long'),
+
+  body('studentMobileNumber')
+    .if(internshipOnly())
+    .trim()
+    .notEmpty()
+    .withMessage('Student mobile number is required')
+    .bail()
+    .matches(MOBILE_REGEX)
+    .withMessage('Student mobile number must be a valid 10-digit mobile number'),
+
+  // ─── Required documents (offer, NOC, synopsis, stipend proof if stipend) ─
+  body().custom((value, { req }) => {
+    if (req.body.semesterType === '8th_project') return true;
+    const f = req.files || {};
+    const missing = [];
+    if (!f.offerLetter?.[0]) missing.push('Offer letter');
+    if (!f.nocLetter?.[0]) missing.push('NOC letter');
+    if (!f.synopsisPPT?.[0]) missing.push('Internship synopsis (PDF/PPT)');
+    if (isTrue(req.body.hasStipend) && !f.stipendProof?.[0]) missing.push('Stipend proof');
+    if (missing.length > 0) {
+      throw new Error(`Required document(s) missing: ${missing.join(', ')}`);
+    }
+    return true;
+  }),
 
   // Fields specific to 8th project
   body('projectTitle')

@@ -1267,7 +1267,8 @@ const ReviewSubmissions = () => {
           <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white max-h-[95vh] overflow-y-auto">
             <div className="mt-3">
               {/* Modal Header */}
-              <div className="flex justify-between items-center mb-6">
+              {/* Modal Header (sticky so Save Changes is always reachable) */}
+              <div className="sticky top-0 z-20 bg-white -mx-5 px-5 py-3 mb-6 border-b flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-900">
                   {selectedSubmission?.reviewType === 'finalReport' ? 'Final Report Review' :
                     selectedSubmission?.reviewType === 'mpr' ? `${selectedSubmission.mprDetails?.type?.toUpperCase()} Review` :
@@ -1276,6 +1277,30 @@ const ReviewSubmissions = () => {
                 </h3>
                 <div className="flex items-center space-x-3">
                   <StatusBadge status={selectedSubmission?.currentReviewStatus || selectedSubmission?.status} />
+
+                  {editMode && selectedSubmission?.currentReviewStatus === 'pending' && (
+                    <button
+                      onClick={handleSaveEdits}
+                      disabled={savingEdits}
+                      className={`px-4 py-2 rounded-md flex items-center transition-colors ${savingEdits
+                        ? 'bg-green-300 text-white cursor-not-allowed'
+                        : 'bg-green-500 text-white hover:bg-green-600'
+                        }`}
+                    >
+                      {savingEdits ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-1" />
+                          Save Changes
+                        </>
+                      )}
+                    </button>
+                  )}
+
                   {selectedSubmission?.currentReviewStatus === 'pending' && (
                     <button
                       onClick={() => setEditMode(!editMode)}
@@ -1308,7 +1333,6 @@ const ReviewSubmissions = () => {
                   </button>
                 </div>
               </div>
-
               {/* Modal Content */}
               {detailsLoading ? (
                 <div className="flex items-center justify-center p-8">
@@ -2121,32 +2145,87 @@ const ReviewSubmissions = () => {
                     </div>
                   )}
 
-                  {/* Marks Assignment Section - Show only on approve */}
-                  {selectedSubmission?.currentReviewStatus === 'pending' && reviewAction === 'approve' && (
-                    <div className="space-y-6">
-                      {selectedSubmission.reviewType === 'registration' && (
-                        <RegistrationMarks marks={marks} setMarks={setMarks} />
+                  {/* Review Section (decision buttons first, marks below them) */}
+                  {selectedSubmission.currentReviewStatus === 'pending' && (
+                    <div className="bg-yellow-50 p-6 rounded-lg border-2 border-yellow-200 space-y-6">
+                      <h4 className="font-semibold text-gray-900 flex items-center">
+                        <AlertCircle className="h-5 w-5 mr-2 text-yellow-600" />
+                        Review Decision Required
+                      </h4>
+
+                      <div className="flex flex-wrap gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setReviewAction('approve')}
+                          className={`flex items-center px-6 py-3 rounded-lg transition-all duration-200 ${reviewAction === 'approve'
+                            ? 'bg-green-600 text-white shadow-lg'
+                            : 'bg-green-100 text-green-800 hover:bg-green-200 border border-green-300'
+                            }`}
+                        >
+                          <CheckCircle className="h-5 w-5 mr-2" />
+                          Approve & Assign Marks
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReviewAction('reject')}
+                          className={`flex items-center px-6 py-3 rounded-lg transition-all duration-200 ${reviewAction === 'reject'
+                            ? 'bg-red-600 text-white shadow-lg'
+                            : 'bg-red-100 text-red-800 hover:bg-red-200 border border-red-300'
+                            }`}
+                        >
+                          <XCircle className="h-5 w-5 mr-2" />
+                          Reject Submission
+                        </button>
+                      </div>
+
+                      {/* Marks Assignment - only when Approve is selected */}
+                      {reviewAction === 'approve' && (
+                        <div className="space-y-6">
+                          {selectedSubmission.reviewType === 'registration' && (
+                            <RegistrationMarks marks={marks} setMarks={setMarks} />
+                          )}
+
+                          {selectedSubmission.reviewType === 'mpr' && (
+                            selectedSubmission.mprType === 'midSem1' || selectedSubmission.mprType === 'midSem2' ? (
+                              <MidSemMarks
+                                marks={marks}
+                                setMarks={setMarks}
+                                semNumber={selectedSubmission.mprType === 'midSem1' ? 1 : 2}
+                              />
+                            ) : (
+                              <MPRMarks
+                                marks={marks.simpleMarks || 0}
+                                setMarks={(val) => setMarks({ simpleMarks: val })}
+                                mprType={selectedSubmission.mprType}
+                              />
+                            )
+                          )}
+
+                          {selectedSubmission.reviewType === 'finalReport' && (
+                            <FinalReportMarks marks={marks} setMarks={setMarks} />
+                          )}
+                        </div>
                       )}
 
-                      {selectedSubmission.reviewType === 'mpr' && (
-                        selectedSubmission.mprType === 'midSem1' || selectedSubmission.mprType === 'midSem2' ? (
-                          <MidSemMarks
-                            marks={marks}
-                            setMarks={setMarks}
-                            semNumber={selectedSubmission.mprType === 'midSem1' ? 1 : 2}
-                          />
-                        ) : (
-                          <MPRMarks
-                            marks={marks.simpleMarks || 0}
-                            setMarks={(val) => setMarks({ simpleMarks: val })}
-                            mprType={selectedSubmission.mprType}
-                          />
-                        )
-                      )}
-
-                      {selectedSubmission.reviewType === 'finalReport' && (
-                        <FinalReportMarks marks={marks} setMarks={setMarks} />
-                      )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Feedback {reviewAction === 'reject' && <span className="text-red-500">*</span>}
+                          {reviewAction === 'approve' && <span className="text-gray-500">(Optional)</span>}
+                        </label>
+                        <textarea
+                          value={feedback}
+                          onChange={(e) => setFeedback(e.target.value)}
+                          rows={4}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder={
+                            reviewAction === 'approve'
+                              ? 'Enter positive feedback or suggestions...'
+                              : reviewAction === 'reject'
+                                ? 'Please provide specific reasons for rejection...'
+                                : 'Select approve or reject first...'
+                          }
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -2234,7 +2313,13 @@ const ReviewSubmissions = () => {
                           : 'bg-red-600 hover:bg-red-700 shadow-lg hover:shadow-xl'
                         }`}
                     >
-                      {loading ? 'Processing...' : `${reviewAction === 'approve' ? 'Approve' : 'Reject'}`}
+                      {loading
+                        ? 'Processing...'
+                        : reviewAction === 'approve'
+                          ? 'Submit Approval'
+                          : reviewAction === 'reject'
+                            ? 'Submit Rejection'
+                            : 'Select Decision'}
                     </button>
                   )}
                 </div>

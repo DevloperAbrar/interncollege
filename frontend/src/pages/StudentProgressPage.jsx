@@ -57,7 +57,7 @@ const OverallBadge = ({ status }) => {
 // ─── Derive step status ───────────────────────────────────────────────────────
 const getStepStatus = (submission, stepKey) => {
   if (!submission) return 'not_started'
-  const { currentStep, registrationReview, mprSubmissions, finalReportReview } = submission
+  const { currentStep, registrationReview, mprSubmissions, finalReportReview, placementDetails } = submission
 
   if (stepKey === 'registration') {
     const s = registrationReview?.status
@@ -70,6 +70,14 @@ const getStepStatus = (submission, stepKey) => {
     const m = mprSubmissions?.[stepKey]
     if (!m?.document) return 'not_started'
     return m.status === 'approved' ? 'approved' : m.status === 'rejected' ? 'rejected' : 'pending'
+  }
+  if (stepKey === 'placement') {
+    const s = placementDetails?.status
+    if (s === 'approved') return 'completed'
+    if (s === 'rejected') return 'rejected'
+    if (s === 'pending') return 'pending'
+    if (currentStep === 'placement_pending') return 'in_progress'
+    return 'not_started'
   }
   if (stepKey === 'final_report') {
     const s = finalReportReview?.status
@@ -92,7 +100,7 @@ const SubmissionSteps = ({ submission }) => {
     : submission.currentStep?.includes('pending') ? 'pending'
     : 'in_progress'
 
-  const steps = needsMPR
+  const baseSteps = needsMPR
     ? [
         { key: 'registration', label: 'Initial Reg.' },
         { key: 'mpr1',         label: 'MPR 1' },
@@ -105,6 +113,13 @@ const SubmissionSteps = ({ submission }) => {
         { key: 'registration', label: 'Initial Reg.' },
         { key: 'final_report', label: 'Final Report' },
       ]
+
+  // Placement step shows for running submissions and for any that have placement data.
+  // Submissions completed before this step existed have no data and do not show it.
+  const showPlacement = !isCompleted || !!submission.placementDetails?.status
+  const steps = showPlacement
+    ? [...baseSteps, { key: 'placement', label: 'Placement' }]
+    : baseSteps
 
   return (
     <div className="rounded-xl border border-gray-200 overflow-hidden">

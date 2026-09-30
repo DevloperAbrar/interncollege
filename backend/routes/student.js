@@ -19,6 +19,10 @@ const {
   updateSubmission,
   getSubmissionHistory
 } = require('../controllers/studentController');
+const {
+  getMyPlacementDetails,
+  submitPlacementDetails
+} = require('../controllers/placementController');
 
 // Apply auth and student role check to all routes
 router.use(auth);
@@ -79,6 +83,10 @@ router.post('/submit/final-report',
   checkValidationResult,
   submitFinalReport
 );
+
+// Placement details form (last step after final report approval, raw data only)
+router.get('/placement-details', getMyPlacementDetails);
+router.post('/placement-details', submitPlacementDetails);
 
 // Update submission (for rejected ones)
 router.put('/submission/:id',

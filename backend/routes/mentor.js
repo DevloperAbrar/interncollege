@@ -6,6 +6,10 @@ const { body } = require('express-validator');
 const { checkValidationResult } = require('../utils/validateInput');
 const { addStudents, getAvailableStudents, setDriveFolder, getDriveFolderStatus } = require('../controllers/mentorController');
 const { upload, handleUploadError } = require('../middleware/upload');
+const {
+  listPlacementDetails,
+  reviewPlacementDetails
+} = require('../controllers/placementController');
 
 const {
   getDashboard,
@@ -87,6 +91,19 @@ router.post('/review-submission', [
     .withMessage('Feedback must not exceed 1000 characters'),
   checkValidationResult
 ], reviewSubmission);
+
+// Placement details review (last step before a submission is marked completed)
+router.get('/placement-details', listPlacementDetails);
+router.put('/placement-details/:id/review', [
+  body('action')
+    .isIn(['approve', 'reject'])
+    .withMessage('Action must be approve or reject'),
+  body('feedback')
+    .optional()
+    .isLength({ max: 1000 })
+    .withMessage('Feedback must not exceed 1000 characters'),
+  checkValidationResult
+], reviewPlacementDetails);
 
 // Monthly submissions monitoring
 router.get('/monthly-submissions', getMonthlySubmissions);

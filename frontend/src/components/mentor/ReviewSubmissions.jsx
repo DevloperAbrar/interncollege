@@ -4,6 +4,7 @@ import { mentorService } from '../../services/mentorService'
 import { formatDateTime, formatCurrency } from '../../utils/helpers'
 import Table from '../common/Table'
 import FileUpload from '../common/FileUpload'
+import PlacementReviews from './PlacementReviews'
 import {
   FileText,
   Eye,
@@ -1054,10 +1055,19 @@ const ReviewSubmissions = () => {
   // Marks state
   const [marks, setMarks] = useState({})
 
+  // Placement details waiting for this mentor (badge on the tab)
+  const [placementPendingCount, setPlacementPendingCount] = useState(0)
+
+  useEffect(() => {
+    mentorService.getPlacementDetails('pending')
+      .then((res) => setPlacementPendingCount(res?.data?.items?.length || 0))
+      .catch(() => { })
+  }, [])
+
   useEffect(() => {
     if (activeTab === 'pending') {
       loadPendingSubmissions()
-    } else {
+    } else if (activeTab === 'history') {
       loadSubmissionHistory()
     }
   }, [activeTab])
@@ -1482,6 +1492,15 @@ const ReviewSubmissions = () => {
           >
             Review History ({submissionHistory.length})
           </button>
+          <button
+            onClick={() => setActiveTab('placement')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'placement'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+          >
+            Placement Details{placementPendingCount > 0 ? ` (${placementPendingCount})` : ''}
+          </button>
         </nav>
       </div>
 
@@ -1506,6 +1525,10 @@ const ReviewSubmissions = () => {
           onPageChange={loadSubmissionHistory}
           emptyMessage="No submission history"
         />
+      )}
+
+      {activeTab === 'placement' && (
+        <PlacementReviews onPendingCountChange={setPlacementPendingCount} />
       )}
 
       {/* Modal */}

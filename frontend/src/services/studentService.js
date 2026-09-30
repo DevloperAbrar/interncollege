@@ -52,6 +52,17 @@ export const studentService = {
     return response.data
   },
 
+  // Placement details form (last step after final report approval, raw data only)
+  getPlacementDetails: async () => {
+    const response = await api.get('/student/placement-details')
+    return response.data
+  },
+
+  submitPlacementDetails: async (payload) => {
+    const response = await api.post('/student/placement-details', payload)
+    return response.data
+  },
+
   // Update submission (for rejected ones)
   updateSubmission: async (id, formData, onUploadProgress) => {
     const response = await apiFormData.put(`/student/submission/${id}`, formData, {

@@ -64,7 +64,7 @@ router.get('/', auth, async (req, res) => {
     const rows = await Promise.all(
       students.map(async (student) => {
         const submissions = await Submission.find({ student: student._id })
-          .select('semesterType currentStep status registrationData registrationReview mprSubmissions finalReportReview createdAt completedAt')
+          .select('semesterType currentStep status registrationData registrationReview mprSubmissions finalReportReview placementDetails createdAt completedAt')
           .sort({ createdAt: 1 });
 
         return {

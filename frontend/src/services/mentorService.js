@@ -74,6 +74,17 @@ export const mentorService = {
     return response.data
   },
 
+  // Placement details review (status: pending | approved | rejected | all)
+  getPlacementDetails: async (status = 'pending') => {
+    const response = await api.get('/mentor/placement-details', { params: { status } })
+    return response.data
+  },
+
+  reviewPlacementDetails: async (id, action, feedback = '') => {
+    const response = await api.put(`/mentor/placement-details/${id}/review`, { action, feedback })
+    return response.data
+  },
+
   // Monthly Submissions
   getMonthlySubmissions: async (studentId = '', month = '') => {
     const response = await api.get('/mentor/monthly-submissions', {

@@ -781,6 +781,40 @@ class ExcelService {
     });
   }
 
+    // Placement / future plan form columns. Headers match the college company-data sheet.
+  // Values are filled only after the mentor has verified (approved) the form.
+  placementColumns(submission) {
+    const pd = submission.placementDetails || {};
+    const verified = pd.status === 'approved';
+    const placed = verified && pd.hasPlacement === true;
+
+    let statusLabel;
+    if (pd.status === 'approved') statusLabel = 'Approved';
+    else if (pd.status === 'pending') statusLabel = 'Pending Review';
+    else if (pd.status === 'rejected') statusLabel = 'Rejected';
+    else if (submission.currentStep === 'placement_pending') statusLabel = 'Not Submitted';
+    else if (submission.currentStep === 'completed') statusLabel = 'Not Collected';
+    else statusLabel = 'Not Reached';
+
+    const examNames = { gate: 'GATE', cat: 'CAT', gre: 'GRE', none: 'None' };
+    const exams = (pd.clearedExams || [])
+      .map((e) => (e === 'other' ? `Other (${pd.clearedExamOther || ''})` : examNames[e] || e))
+      .join(', ');
+
+    return {
+      'Placement Details Status': statusLabel,
+      'Placement Details Reviewed On': verified ? this.formatDate(pd.reviewedAt, 'DD/MM/YYYY') : '',
+      'Have you placed in any company ?': verified ? (pd.hasPlacement ? 'Yes' : 'No') : '',
+      'Placed off campus or close campus ?': placed ? this.prettify(pd.placementType) : '',
+      'Name of Company (please fill full name)': placed ? (pd.companyName || '') : '',
+      'Placement Package (yearly in Lakhs) [put zero if not placed]': verified ? (placed ? this.toNum(pd.packageLPA) : 0) : '',
+      'Company Placement offer letter or any proof (email)': placed ? (pd.offerProof || '') : '',
+      'Are you going for Higher study or Job Preparation?': verified ? this.prettify(pd.nextPlan) : '',
+      'Cleared GATE / CAT /GRE EXAM or others Exam?': verified ? exams : '',
+      'Upload Score Card (GATE / CAT / GRE /Other Exam)': verified ? (pd.scoreCardDetails || '') : ''
+    };
+  }
+
   // One row per submission. Every row has the SAME columns in the SAME order.
   buildProgressRow(submission, mentor = {}, includeDepartment = false) {
     const student = submission.student || {};
@@ -930,6 +964,9 @@ class ExcelService {
       'Placement From': fr.hasPlacement ? this.prettify(fr.placementFrom) : '',
       'PPO Amount (LPA)': fr.hasPPO ? (fr.ppoAmount || '') : '',
       'PPO / Placement Offer Letter': this.docUrl(submission, 'finalReport.ppoOfferLetter', 'finalReport.ppoOfferLetterProject'),
+
+      // ===== PLACEMENT DETAILS FORM (verified by mentor) =====
+      ...this.placementColumns(submission),
 
       // ===== FEEDBACK =====
       'Registration Feedback': regReview.feedback || '',

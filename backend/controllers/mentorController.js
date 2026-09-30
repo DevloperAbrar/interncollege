@@ -770,148 +770,55 @@ const handleMPRReview = async (mprSubmissionId, action, feedback, mentorId) => {
 
 // Updated reviewSubmission function in mentorController.js
 // Updated reviewSubmission function in mentorController.js
-const reviewSubmission = async (req, res) => {
+// ─── GET /api/student/progress ────────────────────────────────────────────────
+const getProgress = async (req, res) => {
   try {
-    console.log('🔍 Starting review process...');
-    console.log('Submission ID:', req.params.id);
-    console.log('Review data:', req.body);
+    const studentId = req.user._id;
+    const allSubmissions = await Submission.find({ student: studentId })
+      .populate('mentor', 'name email')
+      .populate('registrationReview.reviewedBy', 'name')
+      .populate('finalReportReview.reviewedBy', 'name')
+      .sort({ createdAt: -1 });
 
-    const mentorId = req.user._id;
-    const { id } = req.params;
-    const { action, feedback, marks } = req.body; // Added marks
+    const activeSubmission = allSubmissions.find(s => s.currentStep !== 'completed');
 
-    // Validate action
-    if (!['approve', 'reject'].includes(action)) {
-      return errorResponse(res, 'Invalid action. Must be approve or reject', 400);
+    if (!activeSubmission) {
+      return successResponse(res, {
+        hasSubmission: false,
+        message: 'No active submission found',
+        completedSubmissions: allSubmissions.filter(s => s.currentStep === 'completed')
+      }, 'Progress retrieved successfully');
     }
 
-    // Parse the ID for MPR submissions
-    let submissionId = id;
-    let mprType = null;
-
-    if (id.includes('_')) {
-      [submissionId, mprType] = id.split('_');
-      console.log('MPR review detected:', { submissionId, mprType });
-    }
-
-    const submission = await Submission.findById(submissionId)
-      .populate('student', 'name email enrollmentNo');
-
-    if (!submission) {
-      return errorResponse(res, 'Submission not found', 404);
-    }
-
-    if (submission.mentor.toString() !== mentorId.toString()) {
-      return errorResponse(res, 'Not authorized to review this submission', 403);
-    }
-
-    const reviewData = {
-      reviewedBy: mentorId,
-      reviewedAt: new Date(),
-      feedback: feedback || '',
-      status: action === 'approve' ? 'approved' : 'rejected'
+    const responseData = {
+      hasSubmission: true,
+      submission: {
+        _id: activeSubmission._id,
+        semesterType: activeSubmission.semesterType,
+        currentStep: activeSubmission.currentStep,
+        status: activeSubmission.status,
+        studentName: activeSubmission.studentName,
+        enrollmentNo: activeSubmission.enrollmentNo,
+        registrationData: activeSubmission.registrationData,
+        createdAt: activeSubmission.createdAt,
+        updatedAt: activeSubmission.updatedAt,
+        registrationReview: activeSubmission.registrationReview,
+        mprSubmissions: activeSubmission.mprSubmissions || {},
+        finalReport: activeSubmission.finalReport,
+        finalReportReview: activeSubmission.finalReportReview,
+        placementDetails: activeSubmission.placementDetails || null
+      },
+      mentor: activeSubmission.mentor
     };
-
-    // Add marks if provided and approved
-    if (action === 'approve' && marks) {
-      reviewData.marks = marks;
+    if (['7th_internship', '8th_internship', '8th_project'].includes(activeSubmission.semesterType)) {
+      responseData.submission.allMPRApproved = activeSubmission.areAllMPRSubmissionsApproved();
+      responseData.submission.canSubmitFinalReport = activeSubmission.isReadyForFinalReport();
     }
 
-    // Handle different review types
-    if (mprType) {
-      // ✅ MPR Review
-      if (!submission.mprSubmissions || !submission.mprSubmissions[mprType]) {
-        return errorResponse(res, 'MPR submission not found', 404);
-      }
-
-      submission.mprSubmissions[mprType] = {
-        ...submission.mprSubmissions[mprType],
-        ...reviewData
-      };
-
-      // ✅ CRITICAL FIX: Check if all 5 MPRs are approved
-      const allMPRTypes = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
-      const approvedMPRs = allMPRTypes.filter(
-        type => submission.mprSubmissions[type]?.status === 'approved'
-      );
-
-      console.log(`📊 MPR Progress: ${approvedMPRs.length}/5 approved`);
-
-      // ✅ If all 5 MPRs are approved, student can submit final report
-      if (approvedMPRs.length === 4) {
-        console.log('🎉 All 4 MPRs approved! Student can now submit final report');
-        submission.hasPendingMPRReviews = false;
-        // ✅ CRITICAL: update currentStep so frontend unlocks final report
-        submission.currentStep = 'registration_approved';
-      }
-      
-
-      console.log(`✅ ${mprType.toUpperCase()} reviewed: ${action}`);
-
-    } else {
-      // Determine review type based on current step
-      const currentStep = submission.currentStep;
-
-      if (currentStep === 'registration_pending' || currentStep === 'registration_rejected') {
-        // Registration review
-        submission.registrationReview = reviewData;
-
-        if (action === 'approve') {
-          submission.status = 'approved';
-
-          // Set next step based on semester type
-          if (['7th_internship', '8th_internship', '8th_project'].includes(submission.semesterType)) {
-            submission.currentStep = 'mpr_submissions';
-          } else {
-            submission.currentStep = 'registration_approved';
-          }
-        } else {
-          submission.currentStep = 'registration_rejected';
-          submission.status = 'rejected';
-        }
-
-        console.log('✅ Registration reviewed:', action);
-
-      } else if (currentStep === 'final_report_pending' || currentStep === 'final_report_rejected') {
-        // Final report review
-        submission.finalReportReview = reviewData;
-
-        if (action === 'approve') {
-          submission.currentStep = 'completed';
-          submission.status = 'completed';
-          submission.completedAt = new Date();
-        } else {
-          submission.currentStep = 'final_report_rejected';
-        }
-
-        console.log('✅ Final report reviewed:', action);
-      } else {
-        return errorResponse(res, 'Invalid submission state for review', 400);
-      }
-    }
-
-    await submission.save();
-
-    // Send email notification
-    try {
-      const reviewType = mprType ? `${mprType.toUpperCase()} MPR` :
-        submission.currentStep.includes('final') ? 'Final Report' : 'Registration';
-
-      await emailService.sendEmail(
-        submission.student.email,
-        `Submission ${action === 'approve' ? 'Approved' : 'Rejected'}`,
-        `Your ${reviewType} has been ${action}d by your mentor.\n\nFeedback: ${feedback || 'No feedback provided'}`
-      );
-    } catch (emailError) {
-      console.error('Email notification error:', emailError);
-    }
-
-    console.log('✅ Review completed successfully');
-    successResponse(res, submission, `Submission ${action}d successfully`);
-
+    successResponse(res, responseData, 'Progress retrieved successfully');
   } catch (error) {
-    console.error('❌ Review submission error:', error);
-    errorResponse(res, 'Failed to review submission: ' + error.message, 500);
+    console.error('Get progress error:', error);
+    errorResponse(res, 'Failed to get progress', 500);
   }
 };
 

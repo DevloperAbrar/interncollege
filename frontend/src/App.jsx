@@ -38,6 +38,7 @@ import ProgressView from './components/student/ProgressView'
 import RegistrationForm from './components/student/RegistrationForm'
 import MPRSubmission from './components/student/MPRSubmission'
 import FinalReportForm from './components/student/FinalReportForm'
+import PlacementDetailsForm from './components/student/PlacementDetailsForm'
 
 // ─── Public Pages ─────────────────────────────────────────────────────────
 import LandingPage from './landing page/Landingpage'
@@ -270,6 +271,12 @@ function App() {
         <Route path="/student/final-report" element={
           <ProtectedRoute allowedRoles={['student']}>
             <AppLayout><FinalReportForm /></AppLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/student/placement" element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <AppLayout><PlacementDetailsForm /></AppLayout>
           </ProtectedRoute>
         } />
         <Route path="/student/internship" element={

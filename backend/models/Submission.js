@@ -34,6 +34,25 @@ const finalReportMarksSchema = new mongoose.Schema({
   grandTotal: { type: Number, min: 0, max: 250, default: 0 }
 }, { _id: false });
 
+// Placement / future plan form (raw data only, no uploads).
+// Filled by the student after the final report is approved, verified by the mentor.
+const placementDetailsSchema = new mongoose.Schema({
+  hasPlacement: { type: Boolean },
+  placementType: { type: String, enum: ['off_campus', 'close_campus'] },
+  companyName: { type: String, default: '' },
+  packageLPA: { type: Number, min: 0, default: 0 },
+  offerProof: { type: String, default: '' },
+  nextPlan: { type: String, enum: ['higher_study', 'job_preparation', 'not_applicable'] },
+  clearedExams: [{ type: String, enum: ['none', 'gate', 'cat', 'gre', 'other'] }],
+  clearedExamOther: { type: String, default: '' },
+  scoreCardDetails: { type: String, default: '' },
+  submittedAt: Date,
+  status: { type: String, enum: ['pending', 'approved', 'rejected'] },
+  feedback: { type: String, default: '' },
+  reviewedAt: Date,
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, { _id: false });
+
 const mprEntrySchema = {
   document: String,
   submittedAt: Date,
@@ -59,7 +78,13 @@ const submissionSchema = new mongoose.Schema({
 
   currentStep: {
     type: String,
-    enum: ['registration_pending', 'registration_rejected', 'registration_approved', 'mpr_submissions', 'final_report_pending', 'final_report_rejected', 'completed'],
+    enum: [
+      'registration_pending', 'registration_rejected', 'registration_approved',
+      'mpr_submissions',
+      'final_report_pending', 'final_report_rejected',
+      'placement_pending', 'placement_submitted', 'placement_rejected',
+      'completed'
+    ],
     default: 'registration_pending'
   },
 
@@ -154,6 +179,9 @@ const submissionSchema = new mongoose.Schema({
     status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
     marks: finalReportMarksSchema
   },
+
+  // Last step before completion: placement / future plan details verified by mentor
+  placementDetails: placementDetailsSchema,
 
   hasPendingMPRReviews: { type: Boolean, default: false },
   completedAt: Date
@@ -253,7 +281,7 @@ submissionSchema.statics.getRequiredFieldsBySemester = function (semesterType) {
 };
 
 submissionSchema.statics.getNextAvailableSemester = function (currentSemesterType) {
-  // No progression anymore — only 8th sem submissions are allowed, and they're terminal
+  // No progression anymore, only 8th sem submissions are allowed, and they're terminal
   return [];
 };
 

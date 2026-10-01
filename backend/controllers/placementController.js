@@ -13,6 +13,36 @@ const PLACEMENT_TYPES = ['off_campus', 'close_campus'];
 const NEXT_PLANS = ['higher_study', 'job_preparation', 'not_applicable'];
 const EXAMS = ['none', 'gate', 'cat', 'gre', 'other'];
 
+// Submissions that were marked "completed" before the placement step existed have no
+// placement data. When the student next opens the portal, the latest such submission is
+// moved back to "placement_pending" so the form appears. Set to false to disable.
+const REOPEN_LEGACY_COMPLETED = true;
+
+const reopenLegacyCompleted = async (studentId) => {
+  if (!REOPEN_LEGACY_COMPLETED || !studentId) return;
+  try {
+    // Never reopen while the student already has something in progress
+    const active = await Submission.exists({ student: studentId, currentStep: { $ne: 'completed' } });
+    if (active) return;
+
+    const legacy = await Submission.findOne({
+      student: studentId,
+      currentStep: 'completed',
+      'placementDetails.status': { $exists: false }
+    }).sort({ createdAt: -1 });
+
+    if (!legacy) return;
+
+    legacy.currentStep = 'placement_pending';
+    legacy.status = 'approved';
+    legacy.completedAt = undefined;
+    await legacy.save();
+    console.log(`Reopened legacy completed submission ${legacy._id} for placement details`);
+  } catch (error) {
+    console.error('Reopen legacy completed submission error (non-critical):', error.message);
+  }
+};
+
 const fireAndForget = (promiseFactory, label) => {
   if (!emailSvc) return;
   try {
@@ -148,6 +178,8 @@ const validatePlacementPayload = (body = {}) => {
 // @access  Private (Student only)
 const getMyPlacementDetails = async (req, res) => {
   try {
+    await reopenLegacyCompleted(req.user._id);
+
     const submission = await Submission.findOne({
       student: req.user._id,
       currentStep: { $in: PLACEMENT_STEPS }
@@ -182,6 +214,8 @@ const getMyPlacementDetails = async (req, res) => {
 // @access  Private (Student only)
 const submitPlacementDetails = async (req, res) => {
   try {
+    await reopenLegacyCompleted(req.user._id);
+
     const submission = await Submission.findOne({
       student: req.user._id,
       currentStep: { $in: FILL_STEPS }
@@ -357,6 +391,7 @@ const reviewPlacementDetails = async (req, res) => {
 };
 
 module.exports = {
+  reopenLegacyCompleted,
   getMyPlacementDetails,
   submitPlacementDetails,
   listPlacementDetails,

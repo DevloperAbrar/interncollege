@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Submission = require('../models/Submission');
 const { successResponse, errorResponse } = require('../utils/responseHelper');
 const googleDriveService = require('../services/googleDriveService');
+const { reopenLegacyCompleted } = require('./placementController');
 const fs = require('fs');
 
 // ─── Safe email helper ────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ const getSemesterChoicesForStudent = (semesterNumber, completedSubmissions, assi
 const getDashboard = async (req, res) => {
   try {
     const studentId = req.user._id;
+    await reopenLegacyCompleted(studentId);
     const student = await User.findById(studentId)
       .populate('assignedMentor', 'name email')
       .populate('branch', 'name')
@@ -489,6 +491,7 @@ const submitFinalReport = async (req, res) => {
 const getProgress = async (req, res) => {
   try {
     const studentId = req.user._id;
+    await reopenLegacyCompleted(studentId);
     const allSubmissions = await Submission.find({ student: studentId })
       .populate('mentor', 'name email')
       .populate('registrationReview.reviewedBy', 'name')
@@ -520,7 +523,8 @@ const getProgress = async (req, res) => {
         registrationReview: activeSubmission.registrationReview,
         mprSubmissions: activeSubmission.mprSubmissions || {},
         finalReport: activeSubmission.finalReport,
-        finalReportReview: activeSubmission.finalReportReview
+        finalReportReview: activeSubmission.finalReportReview,
+        placementDetails: activeSubmission.placementDetails || null
       },
       mentor: activeSubmission.mentor
     };

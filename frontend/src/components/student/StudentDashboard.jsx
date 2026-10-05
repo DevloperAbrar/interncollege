@@ -667,7 +667,7 @@ const StudentDashboard = () => {
                       className="inline-flex items-center bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white py-3 px-8 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg"
                     >
                       <Plus className="h-5 w-5 mr-2" />
-                      Registration
+                      Registration & Preliminary Review
                     </button>
                   </div>
                 )}

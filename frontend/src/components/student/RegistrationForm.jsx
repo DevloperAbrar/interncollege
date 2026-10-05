@@ -147,8 +147,8 @@ const FILE_RULES = {
   stipendProof: { label: 'Stipend proof', types: ['pdf'] },
   offerLetter: { label: 'Offer letter', types: ['pdf'] },
   nocLetter: { label: 'NOC letter', types: ['pdf'] },
-  synopsisPPT: { label: 'Internship synopsis', types: ['pdf', 'ppt', 'pptx'] },
-  projectReport: { label: 'Project report', types: ['pdf'] }
+  synopsisPPT: { label: 'Preliminary review presentation', types: ['pdf', 'ppt', 'pptx'] },
+  projectReport: { label: 'Start-up report', types: ['pdf'] }
 }
 
 const validateFileField = (name, file) => {
@@ -400,10 +400,10 @@ const RegistrationForm = () => {
 
     if (isProjectType) {
       if (!formData.projectTitle?.trim() || formData.projectTitle.trim().length < 5) {
-        errors.projectTitle = 'Project title must be at least 5 characters long'
+        errors.projectTitle = 'Start-up title must be at least 5 characters long'
       }
       if (!formData.projectType) {
-        errors.projectType = 'Project type is required'
+        errors.projectType = 'Start-up type is required'
       }
       const reportError = validateFileField('projectReport', files.projectReport)
       if (reportError) errors.projectReport = reportError
@@ -558,7 +558,7 @@ const RegistrationForm = () => {
         <div className="mx-auto max-w-4xl">
           <div className="mb-8 text-center">
             <h1 className="mb-2 text-2xl font-semibold text-slate-900 sm:text-3xl">8th Semester - Choose Your Path</h1>
-            <p className="text-slate-600">Select whether you want to do an internship or project</p>
+            <p className="text-slate-600">Select whether you want to do an internship or start-up</p>
           </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -572,12 +572,12 @@ const RegistrationForm = () => {
             </div>
 
             <div
-              onClick={() => setSelectedSubType('project')}
+              onClick={() => setSelectedSubType('Start-up')}
               className="cursor-pointer rounded-xl border border-slate-200 bg-white p-8 text-center transition hover:border-blue-500"
             >
               <Code className="mx-auto mb-4 h-12 w-12 text-blue-600" />
-              <h3 className="mb-2 text-xl font-semibold text-slate-900">Project</h3>
-              <p className="text-slate-600">Research/development project with final report</p>
+              <h3 className="mb-2 text-xl font-semibold text-slate-900">Start-up</h3>
+              <p className="text-slate-600">Innovation & start-up work with final report</p>
             </div>
           </div>
         </div>
@@ -597,7 +597,7 @@ const RegistrationForm = () => {
               {semesterType.replace('_', ' ').toUpperCase()}
             </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-              {isProjectType ? 'Project Registration' : 'Internship Registration'}
+              {isProjectType ? 'Start-up Registration' : 'Internship Registration'}
             </h1>
             <p className="mt-1 text-sm text-slate-600">
               Complete your registration details. Fields marked <span className="text-red-500">*</span> are required.
@@ -615,13 +615,13 @@ const RegistrationForm = () => {
 
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
           {isProjectType ? (
-            <SectionCard icon={Code} title="Project Details">
+            <SectionCard icon={Code} title="Start-up Details">
               <div className="space-y-5">
-                <Field name="projectTitle" label="Project Title" required error={formErrors.projectTitle}>
-                  <input type="text" {...bind('projectTitle')} placeholder="Enter your project title" />
+                <Field name="projectTitle" label="Start-up Title" required error={formErrors.projectTitle}>
+                  <input type="text" {...bind('projectTitle')} placeholder="Enter your Start-up title" />
                 </Field>
-                <Field name="projectType" label="Project Type" required error={formErrors.projectType}>
-                  <Select {...bind('projectType')} placeholder="Select project type" options={PROJECT_TYPE_OPTIONS} />
+                <Field name="projectType" label="Start-up Type" required error={formErrors.projectType}>
+                  <Select {...bind('projectType')} placeholder="Select Start-up type" options={PROJECT_TYPE_OPTIONS} />
                 </Field>
                 <div id="field-projectReport">
                   <FileUpload
@@ -629,7 +629,7 @@ const RegistrationForm = () => {
                     accept=".pdf"
                     allowedTypes={['pdf']}
                     maxSize={MAX_FILE_SIZE}
-                    label="Project Report Document"
+                    label="Start-up Report Document"
                     required
                     error={formErrors.projectReport}
                   />
@@ -896,7 +896,7 @@ const RegistrationForm = () => {
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
                   <p>
                     Each file must be <span className="font-medium text-slate-800">2 MB or smaller</span>. Offer letter,
-                    NOC and stipend proof must be PDF. The synopsis can be PDF or PPT/PPTX.
+                    NOC and stipend proof must be PDF. The preliminary review file can be PDF or PPT/PPTX.
                   </p>
                 </div>
 
@@ -931,7 +931,7 @@ const RegistrationForm = () => {
                       accept=".pdf,.ppt,.pptx"
                       allowedTypes={['pdf', 'ppt', 'pptx']}
                       maxSize={MAX_FILE_SIZE}
-                      label="Internship Synopsis (PDF / PPT)"
+                      label="Preliminary Review: Presentation of Synopsis/Outline, Identification of Outcomes (PDF / PPT)"
                       required
                       error={formErrors.synopsisPPT}
                     />

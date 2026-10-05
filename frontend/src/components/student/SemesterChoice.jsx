@@ -43,24 +43,31 @@ const ALL_OPTIONS = {
   },
   '8th_internship': {
     id: '8th_internship',
-    title: '8th Semester Internship',
+    title: 'Industry Internship/Research Internship/ Innovation & Start-up (VIII Sem)',
     description: 'Final year internship with full MPR tracking and evaluation.',
     icon: GraduationCap,
     color: 'from-purple-500 to-pink-500',
     bgColor: 'from-purple-50 to-pink-50',
     borderColor: 'border-purple-200',
-    features: ['Complete registration', '3 MPR submissions', '1 Mid-semester evaluation', 'Final report'],
+    features: [
+      'Preliminary review: Presentation of synopsis/outline, identification of outcomes (Marks: 20)',
+      'Monthly Progress Report (MPR)-1 (Marks: 10)',
+      'Monthly Progress Report (MPR)-2 (Marks: 10)',
+      'Monthly Progress Report (MPR)-3 (Marks: 10)',
+      'Mid-Term Presentation & Review (Marks: 100)',
+      'End-term internship/start-up evaluation (Marks: 250)'
+    ],
     timeline: '6+ months'
   },
   '8th_project': {
     id: '8th_project',
-    title: '8th Semester Project',
-    description: 'Research or development project for final semester.',
+    title: '8th Semester Start-up',
+    description: 'Innovation & start-up work for the final semester.',
     icon: Code,
     color: 'from-indigo-500 to-blue-600',
     bgColor: 'from-indigo-50 to-blue-50',
     borderColor: 'border-indigo-200',
-    features: ['Project proposal', 'Research methodology', 'Conference tracking', 'Publication status'],
+    features: ['Start-up proposal', 'Research methodology', 'Conference tracking', 'Publication status'],
     timeline: 'Full semester'
   }
 }

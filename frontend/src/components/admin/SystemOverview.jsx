@@ -422,7 +422,7 @@ const SystemOverview = () => {
       case '6th_internship': return 'Delete 6th Semester Internship Students'
       case '7th_internship': return 'Delete 7th Semester Internship Students'
       case '8th_internship': return 'Delete 8th Semester Internship Students'
-      case '8th_project': return 'Delete 8th Semester Project Students'
+      case '8th_project': return 'Delete 8th Semester Start-up Students'
       case 'any_internship': return 'Delete Any Other Internship Students'
       default: return 'Delete Students'
     }
@@ -435,7 +435,7 @@ const SystemOverview = () => {
       case '6th_internship': return 'This will permanently delete all students who have submitted 6th semester internship forms and their submissions.'
       case '7th_internship': return 'This will permanently delete all students who have submitted 7th semester internship forms and their submissions.'
       case '8th_internship': return 'This will permanently delete all students who have submitted 8th semester internship forms and their submissions.'
-      case '8th_project': return 'This will permanently delete all students who have submitted 8th semester project forms and their submissions.'
+      case '8th_project': return 'This will permanently delete all students who have submitted 8th semester start-up  forms and their submissions.'
       case 'any_internship': return 'This will permanently delete all students who have submitted any other internship forms and their submissions.'
       default: return 'This will permanently delete the selected students and their submissions.'
     }
@@ -601,7 +601,7 @@ const SystemOverview = () => {
               <option value="6th_internship">6th Semester Internship</option>
               <option value="7th_internship">7th Semester Internship</option>
               <option value="8th_internship">8th Semester Internship</option>
-              <option value="8th_project">8th Semester Project</option>
+              <option value="8th_project">8th Semester Start-up</option>
               <option value="any_internship">Any Other Internship</option>
             </select>
           </>

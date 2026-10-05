@@ -29,6 +29,12 @@ import {
   X as CloseIcon
 } from 'lucide-react'
 
+// "23io10mo34@mitsgwl.ac.in" -> "IO", "23iy10av11@mitsgwl.ac.in" -> "IY"
+const getBranchFromEmail = (email = '') => {
+  const match = String(email).trim().toLowerCase().match(/^\d{2}([a-z]{2})\d/)
+  return match ? match[1].toUpperCase() : ''
+}
+
 // StatusBadge component
 const StatusBadge = ({ status }) => {
   const getStatusColor = (status) => {
@@ -183,7 +189,7 @@ const RegistrationMarks = ({ marks, setMarks }) => {
 
   return (
     <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-      <h5 className="font-semibold text-gray-900 mb-4">Registration Marks Assignment (Max: 20)</h5>
+      <h5 className="font-semibold text-gray-900 mb-4">Preliminary Review Marks Assignment (Max: 20)</h5>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MarksInput
@@ -214,7 +220,7 @@ const RegistrationMarks = ({ marks, setMarks }) => {
 
       <div className="mt-4 pt-4 border-t border-blue-300">
         <div className="flex justify-between items-center">
-          <span className="font-semibold text-gray-900">Total Registration Marks:</span>
+          <span className="font-semibold text-gray-900">Total Preliminary Review Marks:</span>
           <span className="text-2xl font-bold text-blue-600">{total.toFixed(1)} / 20</span>
         </div>
       </div>
@@ -272,7 +278,7 @@ const MidSemMarks = ({ marks, setMarks, semNumber }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MarksInput
-          label="Internship/Project Daily Diary"
+          label="Internship/Start-up Daily Diary"
           value={marks.dailyDiary || 0}
           onChange={(val) => updateMarks('dailyDiary', val)}
           max={10}
@@ -284,7 +290,7 @@ const MidSemMarks = ({ marks, setMarks, semNumber }) => {
           max={20}
         />
         <MarksInput
-          label="Brief Internship/Project Report"
+          label="Brief Internship/Start-up Report"
           value={marks.briefReport || 0}
           onChange={(val) => updateMarks('briefReport', val)}
           max={30}
@@ -362,13 +368,13 @@ const FinalReportMarks = ({ marks, setMarks }) => {
       {/* Daily Diary and Outcomes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MarksInput
-          label="Internship/Project Daily Diary"
+          label="Internship/Start-up Daily Diary"
           value={marks.dailyDiary || 0}
           onChange={(val) => updateMarks('dailyDiary', val)}
           max={20}
         />
         <MarksInput
-          label="Internship/Project Outcomes"
+          label="Internship/Start-up Outcomes"
           value={marks.projectOutcomes || 0}
           onChange={(val) => updateMarks('projectOutcomes', val)}
           max={30}
@@ -386,7 +392,7 @@ const FinalReportMarks = ({ marks, setMarks }) => {
             max={20}
           />
           <MarksInput
-            label="Methodology/Area of Internship/Project"
+            label="Methodology/Area of Internship/Start-up"
             value={marks.methodologyArea || 0}
             onChange={(val) => updateMarks('methodologyArea', val)}
             max={20}
@@ -578,9 +584,9 @@ const RegistrationEditForm = ({
     return (
       <div className="space-y-4">
         <div className="bg-white p-4 rounded-lg border border-blue-200">
-          <h5 className="font-semibold text-gray-900 mb-3">Edit Project Information</h5>
+          <h5 className="font-semibold text-gray-900 mb-3">Edit Start-up Information</h5>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <EditField label="Project Title">{text('projectTitle')}</EditField>
+            <EditField label="Start-up Title">{text('projectTitle')}</EditField>
             <EditField label="Project Type">
               {select('projectType', PROJECT_TYPE_OPTIONS, 'Select type')}
             </EditField>
@@ -594,7 +600,7 @@ const RegistrationEditForm = ({
             accept=".pdf"
             allowedTypes={['pdf']}
             maxSize={2 * 1024 * 1024}
-            label="Upload New Project Report"
+            label="Upload New Start-up Report"
           />
           {registration.projectReport && (
             <div className="mt-2 text-sm text-gray-600">
@@ -775,7 +781,7 @@ const RegistrationEditForm = ({
               accept=".pdf,.ppt,.pptx"
               allowedTypes={['pdf', 'ppt', 'pptx']}
               maxSize={2 * 1024 * 1024}
-              label="Replace Internship Synopsis (PDF / PPT)"
+              label="Replace Preliminary Review Presentation (PDF / PPT)"
             />
             {registration.synopsisPPT && (
               <div className="mt-2 text-sm text-gray-600">
@@ -798,16 +804,16 @@ const MARK_FIELDS = {
     ['synopsisPresentation', 'Synopsis / Presentation', 5]
   ],
   midSem: [
-    ['dailyDiary', 'Internship/Project Daily Diary', 10],
+    ['dailyDiary', 'Internship/Start-up Daily Diary', 10],
     ['expectedAchievedOutcomes', 'Expected/Achieved Outcomes & Social Relevance', 20],
-    ['briefReport', 'Brief Internship/Project Report', 30],
+    ['briefReport', 'Brief Internship/Start-up Report', 30],
     ['presentationViva', 'Presentation & Viva', 40]
   ],
   finalReport: [
-    ['dailyDiary', 'Internship/Project Daily Diary', 20],
-    ['projectOutcomes', 'Internship/Project Outcomes', 30],
+    ['dailyDiary', 'Internship/Start-up Daily Diary', 20],
+    ['projectOutcomes', 'Internship/Start-up Outcomes', 30],
     ['objectiveLiteratureReview', 'Objective & Literature Review', 20],
-    ['methodologyArea', 'Methodology/Area of Internship/Project', 20],
+    ['methodologyArea', 'Methodology/Area of Internship/Start-up', 20],
     ['workDescription', 'Hardware/Software/Work Description', 20],
     ['dataResultDiscussion', 'Data Collection/Result/Discussion/Conclusion', 20],
     ['overallFormatPlagiarism', 'Overall Format & Plagiarism', 20],
@@ -1314,7 +1320,7 @@ const ReviewSubmissions = () => {
     } else {
       const isInternship = submission.semesterType?.includes('internship')
       return {
-        type: isInternship ? 'Internship Registration' : 'Project Registration',
+        type: isInternship ? 'Internship Registration' : 'Start-up Registration',
         companyName: submission.companyName,
         internshipTitle: submission.internshipTitle,
         projectTitle: submission.projectTitle,
@@ -1542,8 +1548,8 @@ const ReviewSubmissions = () => {
                 <h3 className="text-xl font-bold text-gray-900">
                   {selectedSubmission?.reviewType === 'finalReport' ? 'Final Report Review' :
                     selectedSubmission?.reviewType === 'mpr' ? `${selectedSubmission.mprDetails?.type?.toUpperCase()} Review` :
-                      selectedSubmission?.semesterType?.includes('internship') ? 'Internship Registration Review' :
-                        'Project Registration Review'}
+                      selectedSubmission?.semesterType?.includes('internship') ? 'Internship Registration & Preliminary Review' :
+                        'Start-up Registration & Preliminary Review'}
                 </h3>
                 <div className="flex items-center space-x-3">
                   <StatusBadge status={selectedSubmission?.currentReviewStatus || selectedSubmission?.status} />
@@ -1630,7 +1636,11 @@ const ReviewSubmissions = () => {
                     </div>
                     <div>
                       <strong className="text-gray-700">Branch:</strong>
-                      <div className="text-gray-900">{selectedSubmission.student?.branch || selectedSubmission.branch || 'N/A'}</div>
+                      <div className="text-gray-900">
+                        {selectedSubmission.student?.branchCode?.toUpperCase() ||
+                          getBranchFromEmail(selectedSubmission.student?.email || selectedSubmission.email) ||
+                          'N/A'}
+                      </div>
                     </div>
                     <div>
                       <strong className="text-gray-700">Submitted On:</strong>
@@ -1677,7 +1687,7 @@ const ReviewSubmissions = () => {
                           ) : (
                             <>
                               <Briefcase className="h-5 w-5 mr-2" />
-                              Complete Project Registration Details
+                              Complete Start-up Registration Details
                             </>
                           )}
                         </h4>
@@ -1867,7 +1877,7 @@ const ReviewSubmissions = () => {
                                     </div>
                                   </div>
                                   <div>
-                                    <strong className="text-gray-700">Internship Synopsis:</strong>
+                                    <strong className="text-gray-700">Preliminary Review Presentation:</strong>
                                     <div className="mt-1">
                                       <DocumentLink
                                         url={selectedSubmission.registrationData?.synopsisPPT}
@@ -1885,14 +1895,14 @@ const ReviewSubmissions = () => {
                           {selectedSubmission.semesterType === '8th_project' && (
                             <>
                               <div className="bg-white p-4 rounded-lg border border-blue-200">
-                                <h5 className="font-semibold text-gray-900 mb-3">Project Information</h5>
+                                <h5 className="font-semibold text-gray-900 mb-3">Start-up Information</h5>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                                   <div>
-                                    <strong className="text-gray-700">Project Title:</strong>
+                                    <strong className="text-gray-700">Start-up Title:</strong>
                                     <div className="text-gray-900">{selectedSubmission.registrationData?.projectTitle || 'N/A'}</div>
                                   </div>
                                   <div>
-                                    <strong className="text-gray-700">Project Type:</strong>
+                                    <strong className="text-gray-700">Start-up Type:</strong>
                                     <div className="text-gray-900 capitalize">{selectedSubmission.registrationData?.projectType?.replace('_', ' ') || 'N/A'}</div>
                                   </div>
                                 </div>
@@ -1901,12 +1911,12 @@ const ReviewSubmissions = () => {
                               <div className="bg-white p-4 rounded-lg border border-blue-200">
                                 <h5 className="font-semibold text-gray-900 mb-3 flex items-center">
                                   <FileCheck className="h-4 w-4 mr-2" />
-                                  Project Report
+                                  Start-up Report
                                 </h5>
                                 <div>
                                   <DocumentLink
                                     url={selectedSubmission.registrationData?.projectReport}
-                                    label="View Project Report"
+                                    label="View Start-up Report"
                                     icon={FileText}
                                   />
                                 </div>
@@ -2225,11 +2235,11 @@ const ReviewSubmissions = () => {
 
                               {selectedSubmission.finalReportDetails.finalProjectReport && (
                                 <div>
-                                  <strong className="text-gray-700">Final Project Report:</strong>
+                                  <strong className="text-gray-700">Final Start-up Report:</strong>
                                   <div className="mt-1">
                                     <DocumentLink
                                       url={selectedSubmission.finalReportDetails.finalProjectReport}
-                                      label="View Project Report"
+                                      label="View Start-up Report"
                                       icon={FileText}
                                     />
                                   </div>

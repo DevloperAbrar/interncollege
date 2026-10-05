@@ -623,14 +623,6 @@ const StudentDashboard = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4">
-                      <Link
-                        to="/student/progress"
-                        className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-3 px-6 rounded-xl font-medium flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg"
-                      >
-                        View Detailed Progress
-                        <ArrowRight className="h-5 w-5 ml-2" />
-                      </Link>
-
                       {(() => {
                         const nextAction = getNextAction(currentStep, semesterType, submission)
                         if (nextAction) {

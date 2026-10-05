@@ -65,7 +65,6 @@ const NAVIGATION = {
   ],
   student: [
     { name: 'Dashboard',    path: '/student/dashboard',        icon: 'LayoutDashboard' },
-    { name: 'My Progress',  path: '/student/student-progress', icon: 'Activity' },
   ]
 }
 

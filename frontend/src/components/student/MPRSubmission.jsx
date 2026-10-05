@@ -207,6 +207,34 @@ const MPRSubmission = () => {
   const pendingCount = submittedDocs.filter(m => m.status === 'pending').length
   const rejectedCount = submittedDocs.filter(m => m.status === 'rejected').length
 
+  const mprOnly = MPR_TYPES.filter(m => m.key.startsWith('mpr'))
+  const midSemOnly = MPR_TYPES.filter(m => m.key.startsWith('midSem'))
+
+  const renderCard = (mpr) => {
+    const mprStatus = mprData[mpr.key]
+    const status = mprStatus?.document ? mprStatus.status : 'not_submitted'
+    const colors = getColorClasses(mpr.color, status)
+    const canSubmit = status === 'not_submitted' || status === 'rejected'
+    const isActive = activeCard === mpr.key
+
+    return (
+      <MPRCard
+        key={mpr.key}
+        mpr={mpr}
+        status={status}
+        mprStatus={mprStatus}
+        colors={colors}
+        canSubmit={canSubmit}
+        isActive={isActive}
+        uploadingMPR={uploadingMPR}
+        onToggleCard={() => setActiveCard(isActive ? null : mpr.key)}
+        onSubmit={handleMPRSubmit}
+        getStatusIcon={getStatusIcon}
+        getStatusBadge={getStatusBadge}
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8 px-4">
       <div className="max-w-6xl mx-auto">
@@ -240,32 +268,22 @@ const MPRSubmission = () => {
           <p className="text-sm text-gray-600 mt-2">{approvedCount} of {TOTAL_DOCS} documents approved</p>
         </div>
 
-        {/* MPR Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {MPR_TYPES.map((mpr) => {
-            const mprStatus = mprData[mpr.key]
-            const status = mprStatus?.document ? mprStatus.status : 'not_submitted'
-            const colors = getColorClasses(mpr.color, status)
-            const canSubmit = status === 'not_submitted' || status === 'rejected'
-            const isActive = activeCard === mpr.key
+        {/* Section 1: Monthly Progress Reports (all 3 together) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <h3 className="text-xl font-semibold text-gray-900 mb-1">Monthly Progress Reports (MPR)</h3>
+          <p className="text-sm text-gray-600 mb-5">Submit MPR 1, MPR 2 and MPR 3</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {mprOnly.map(renderCard)}
+          </div>
+        </div>
 
-            return (
-              <MPRCard
-                key={mpr.key}
-                mpr={mpr}
-                status={status}
-                mprStatus={mprStatus}
-                colors={colors}
-                canSubmit={canSubmit}
-                isActive={isActive}
-                uploadingMPR={uploadingMPR}
-                onToggleCard={() => setActiveCard(isActive ? null : mpr.key)}
-                onSubmit={handleMPRSubmit}
-                getStatusIcon={getStatusIcon}
-                getStatusBadge={getStatusBadge}
-              />
-            )
-          })}
+        {/* Section 2: Mid Semester Evaluation (just below) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <h3 className="text-xl font-semibold text-gray-900 mb-1">Mid Semester Evaluation</h3>
+          <p className="text-sm text-gray-600 mb-5">Submit your mid-semester evaluation</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {midSemOnly.map(renderCard)}
+          </div>
         </div>
 
         {/* CTA when all 4 approved */}

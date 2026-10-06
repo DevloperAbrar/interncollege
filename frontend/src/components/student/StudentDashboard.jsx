@@ -526,6 +526,10 @@ const StudentDashboard = () => {
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
+  // Hooks must run on every render, so this sits above the early returns below
+  const completedTotal = dashboardData?.completedSubmissions?.length || 0
+  const completedCount = useCountUp(completedTotal, 700)
+
   useEffect(() => {
     loadDashboardData()
   }, [])
@@ -613,7 +617,6 @@ const StudentDashboard = () => {
       : 'Pick your track and submit your registration to get started.'
 
   const SemesterIcon = getSemesterIcon(semesterType)
-  const completedCount = useCountUp(completedSubmissions.length, 700)
 
   return (
     <div className="space-y-6 lg:space-y-8">

@@ -34,6 +34,22 @@ const finalReportMarksSchema = new mongoose.Schema({
   grandTotal: { type: Number, min: 0, max: 250, default: 0 }
 }, { _id: false });
 
+// Dynamic (department-defined) rubric result. Stores a snapshot of the fields used,
+// so later rubric changes never alter marks that were already given.
+const rubricItemSchema = new mongoose.Schema({
+  key: { type: String, required: true },
+  label: { type: String, required: true },
+  max: { type: Number, required: true },
+  score: { type: Number, required: true, min: 0 }
+}, { _id: false });
+
+const rubricResultSchema = new mongoose.Schema({
+  rubricVersion: { type: Number, default: 0 },
+  items: { type: [rubricItemSchema], default: [] },
+  total: { type: Number, default: 0 },
+  maxTotal: { type: Number, default: 0 }
+}, { _id: false });
+
 // Placement / future plan form (raw data only, no uploads).
 // Filled by the student after the final report is approved, verified by the mentor.
 const placementDetailsSchema = new mongoose.Schema({
@@ -61,7 +77,8 @@ const mprEntrySchema = {
   feedback: String,
   reviewedAt: Date,
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  marks: { type: Number, min: 0, max: 10, default: 0 }
+  marks: { type: Number, min: 0, max: 10, default: 0 },   // legacy (old fixed marks)
+  rubricResult: rubricResultSchema
 };
 
 const submissionSchema = new mongoose.Schema({
@@ -139,7 +156,8 @@ const submissionSchema = new mongoose.Schema({
       feedback: String,
       reviewedAt: Date,
       reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      marks: midSemMarksSchema
+      marks: midSemMarksSchema,   // legacy
+      rubricResult: rubricResultSchema
     }
   },
 
@@ -170,7 +188,8 @@ const submissionSchema = new mongoose.Schema({
     reviewedAt: Date,
     feedback: String,
     status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-    marks: marksBreakdownSchema
+        marks: marksBreakdownSchema,   // legacy
+    rubricResult: rubricResultSchema
   },
 
   finalReportReview: {
@@ -178,7 +197,8 @@ const submissionSchema = new mongoose.Schema({
     reviewedAt: Date,
     feedback: String,
     status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-    marks: finalReportMarksSchema
+        marks: finalReportMarksSchema,   // legacy
+    rubricResult: rubricResultSchema
   },
 
   // Last step before completion: placement / future plan details verified by mentor

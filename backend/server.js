@@ -13,6 +13,7 @@ const connectDB = require('./config/database');
 const analyticsRoutes = require('./routes/analytics');
 const deptAdminRoutes = require('./routes/deptAdmin');
 const departmentRoutes = require('./routes/department');
+const rubricRoutes = require('./routes/rubric');
 const studentProgressRoutes = require('./routes/studentProgress');
 const adminLogsRoutes = require('./routes/adminLogs');
 const authRoutes = require('./routes/auth');
@@ -157,6 +158,7 @@ app.use('/api/student-progress', studentProgressRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/dept-admin', deptAdminRoutes);
 app.use('/api/departments', departmentRoutes);
+app.use('/api/rubric', rubricRoutes);
 console.log('✅ All routes registered');
 
 // ─── 404 (after all routes) ──────────────────────────────────────────────────

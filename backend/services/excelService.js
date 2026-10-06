@@ -2,6 +2,7 @@ const XLSX = require('xlsx');
 const User = require('../models/User');
 const Submission = require('../models/Submission');
 const moment = require('moment');
+const rubricService = require('./rubricService');
 
 class ExcelService {
 
@@ -829,23 +830,77 @@ class ExcelService {
       'Upload Score Card (GATE / CAT / GRE /Other Exam)': verified ? (pd.scoreCardDetails || '') : ''
     };
   }
+  // Dynamic marks columns for one stage of a department's rubric.
+  // Ungraded / not applicable cells are left blank (not 0).
+  rubricColumns(prefix, stage, result, applicable = true) {
+    if (!stage || stage.enabled === false) return {};
 
+    const scores = {};
+    (result?.items || []).forEach((i) => { scores[i.key] = i.score; });
+
+    const cols = {};
+    let maxTotal = 0;
+    stage.fields.forEach((f) => {
+      maxTotal += Number(f.max) || 0;
+      cols[`${prefix} - ${f.label} (${f.max})`] =
+        applicable && result && Object.prototype.hasOwnProperty.call(scores, f.key) ? scores[f.key] : '';
+    });
+    cols[`${prefix} Total (${Math.round(maxTotal * 100) / 100})`] =
+      applicable && result ? this.toNum(result.total) : '';
+    return cols;
+  }
+
+  // department id -> rubric (one DB read per department, not per row)
+  async loadRubricMap(departmentIds = []) {
+    const map = new Map();
+    const ids = [...new Set(departmentIds.filter(Boolean).map((d) => String(d?._id || d)))];
+    await Promise.all(ids.map(async (id) => { map.set(id, await rubricService.getDepartmentRubric(id)); }));
+    map.set('default', await rubricService.getDepartmentRubric(null));
+    return map;
+  }
+
+  pickRubric(map, departmentId) {
+    return map.get(String(departmentId?._id || departmentId || '')) || map.get('default');
+  }
   // One row per submission. Every row has the SAME columns in the SAME order.
-  buildProgressRow(submission, mentor = {}, includeDepartment = false) {
+  // One row per submission. Rows of the same department have the SAME columns in the SAME order.
+  buildProgressRow(submission, mentor = {}, includeDepartment = false, rubric = null) {
+    const stages = (rubric && rubric.stages) || rubricService.getDefaultStages();
+
     const student = submission.student || {};
     const reg = submission.registrationData || {};
     const fr = submission.finalReport || {};
     const regReview = submission.registrationReview || {};
     const finalReview = submission.finalReportReview || {};
     const mprs = submission.mprSubmissions || {};
-    const regMarks = regReview.marks || {};
-    const finalMarks = finalReview.marks || {};
 
     const isProject = submission.semesterType === '8th_project';
     const hasMprFlow = ['7th_internship', '8th_internship', '8th_project'].includes(submission.semesterType);
 
     const mid = mprs.midSem1 || {};
-    const midMarks = mid.marks && typeof mid.marks === 'object' ? mid.marks : {};
+
+    const regResult = rubricService.readResult(regReview, 'registration');
+    const finalResult = rubricService.readResult(finalReview, 'finalReport');
+    const mprResult = (key) => (hasMprFlow ? rubricService.readResult(mprs[key], 'mpr') : null);
+    const midResult = hasMprFlow ? rubricService.readResult(mid, 'midSem') : null;
+
+    // Grand total across every enabled stage that applies to this submission
+    let grandTotal = 0;
+    let grandMax = 0;
+    [
+      { result: regResult, stage: stages.registration, applicable: true },
+      { result: mprResult('mpr1'), stage: stages.mpr, applicable: hasMprFlow },
+      { result: mprResult('mpr2'), stage: stages.mpr, applicable: hasMprFlow },
+      { result: mprResult('mpr3'), stage: stages.mpr, applicable: hasMprFlow },
+      { result: midResult, stage: stages.midSem, applicable: hasMprFlow },
+      { result: finalResult, stage: stages.finalReport, applicable: true }
+    ].forEach(({ result, stage, applicable }) => {
+      if (!applicable || !stage || stage.enabled === false) return;
+      grandMax += stage.fields.reduce((s, f) => s + (Number(f.max) || 0), 0);
+      grandTotal += Number(result?.total) || 0;
+    });
+    grandMax = Math.round(grandMax * 100) / 100;
+    grandTotal = Math.round(grandTotal * 100) / 100;
 
     const companyType =
       reg.companyType === 'other' && reg.companyTypeOther
@@ -857,7 +912,8 @@ class ExcelService {
       (k) => this.mprStatus(mprs[k]) === 'Approved'
     ).length;
 
-    const simpleMpr = (key) => (hasMprFlow ? this.toNum(mprs[key]?.marks) : '');
+    const departmentLabel =
+      mentor?.department?.name || (typeof mentor?.department === 'string' ? mentor.department : '');
 
     const row = {
       // ===== STUDENT =====
@@ -870,7 +926,7 @@ class ExcelService {
       // ===== FACULTY =====
       'Assigned Faculty': mentor?.name || '',
       'Faculty Email': mentor?.email || '',
-      ...(includeDepartment ? { 'Department': mentor?.department || '' } : {}),
+      ...(includeDepartment ? { 'Department': departmentLabel } : {}),
 
       // ===== STATUS =====
       'Semester Type': (submission.semesterType || '').replace(/_/g, ' ').toUpperCase(),
@@ -904,49 +960,30 @@ class ExcelService {
       'Project Title': reg.projectTitle || '',
       'Project Type': this.prettify(reg.projectType),
 
-      // ===== REGISTRATION MARKS =====
-      'Registration - Objective/Problem (5)': this.toNum(regMarks.objectiveProblemIdentification),
-      'Registration - Methodology (5)': this.toNum(regMarks.proposedMethodology),
-      'Registration - Relevance (5)': this.toNum(regMarks.relevanceRealWorld),
-      'Registration - Synopsis (5)': this.toNum(regMarks.synopsisPresentation),
-      'Registration Total Marks (20)': this.toNum(regMarks.totalRegistrationMarks),
+      // ===== REGISTRATION MARKS (department rubric) =====
+      ...this.rubricColumns('Registration', stages.registration, regResult),
       'Registration Status': this.prettify(regReview.status) || 'Not Started',
       'Registration Reviewed On': this.formatDate(regReview.reviewedAt, 'DD/MM/YYYY'),
 
       // ===== MPR + MID SEM MARKS (7th / 8th internship and 8th project) =====
-      'MPR1 Marks (10)': simpleMpr('mpr1'),
+      ...this.rubricColumns('MPR1', stages.mpr, mprResult('mpr1'), hasMprFlow),
       'MPR1 Status': hasMprFlow ? this.mprStatus(mprs.mpr1) : '',
-      'MPR2 Marks (10)': simpleMpr('mpr2'),
+      ...this.rubricColumns('MPR2', stages.mpr, mprResult('mpr2'), hasMprFlow),
       'MPR2 Status': hasMprFlow ? this.mprStatus(mprs.mpr2) : '',
-      'MPR3 Marks (10)': simpleMpr('mpr3'),
+      ...this.rubricColumns('MPR3', stages.mpr, mprResult('mpr3'), hasMprFlow),
       'MPR3 Status': hasMprFlow ? this.mprStatus(mprs.mpr3) : '',
 
-      'MidSem1 - Daily Diary (10)': hasMprFlow ? this.toNum(midMarks.dailyDiary) : '',
-      'MidSem1 - Outcomes (20)': hasMprFlow ? this.toNum(midMarks.expectedAchievedOutcomes) : '',
-      'MidSem1 - Report (30)': hasMprFlow ? this.toNum(midMarks.briefReport) : '',
-      'MidSem1 - Presentation (40)': hasMprFlow ? this.toNum(midMarks.presentationViva) : '',
-      'MidSem1 Total (100)': hasMprFlow ? this.toNum(midMarks.total) : '',
+      ...this.rubricColumns('MidSem1', stages.midSem, midResult, hasMprFlow),
       'MidSem1 Status': hasMprFlow ? this.mprStatus(mid) : '',
       'MPRs Approved (out of 4)': hasMprFlow ? `${approvedCount}/4` : '',
 
-      // ===== FINAL REPORT MARKS =====
-      'Final - Daily Diary (20)': this.toNum(finalMarks.dailyDiary),
-      'Final - Project Outcomes (30)': this.toNum(finalMarks.projectOutcomes),
-      'Final - Objective & Literature (20)': this.toNum(finalMarks.objectiveLiteratureReview),
-      'Final - Methodology (20)': this.toNum(finalMarks.methodologyArea),
-      'Final - Work Description (20)': this.toNum(finalMarks.workDescription),
-      'Final - Results & Discussion (20)': this.toNum(finalMarks.dataResultDiscussion),
-      'Final - Format & Plagiarism (20)': this.toNum(finalMarks.overallFormatPlagiarism),
-      'Final Report Marks (100)': this.toNum(finalMarks.totalReportMarks),
-      'Final - Define Objective (20)': this.toNum(finalMarks.defineObjective),
-      'Final - Content (20)': this.toNum(finalMarks.contentPresentation),
-      'Final - Presentation Skill (20)': this.toNum(finalMarks.presentationSkill),
-      'Final - Relevance (20)': this.toNum(finalMarks.socialIndustrialRelevance),
-      'Final - Q&A (20)': this.toNum(finalMarks.questionAnswer),
-      'Final Presentation Marks (100)': this.toNum(finalMarks.totalPresentationMarks),
-      'FINAL GRAND TOTAL (250)': this.toNum(finalMarks.grandTotal),
+      // ===== FINAL REPORT MARKS (department rubric) =====
+      ...this.rubricColumns('Final', stages.finalReport, finalResult),
       'Final Report Status': this.prettify(finalReview.status) || 'Not Started',
       'Final Report Reviewed On': this.formatDate(finalReview.reviewedAt, 'DD/MM/YYYY'),
+
+      // ===== GRAND TOTAL =====
+      [`GRAND TOTAL (${grandMax})`]: grandTotal,
 
       // ===== REGISTRATION DOCUMENTS =====
       'Offer Letter': this.docUrl(submission, 'registrationData.offerLetter'),
@@ -992,12 +1029,39 @@ class ExcelService {
   }
 
   // Builds the xlsx buffer with auto-sized columns
+  // Union of all row keys. A new column is inserted right after the column that
+  // precedes it in its own row, so mark columns of different departments stay in place.
+  mergeHeaders(rows) {
+    const header = [];
+    const seen = new Set();
+    rows.forEach((row) => {
+      const keys = Object.keys(row);
+      const signature = keys.join('\u0001');
+      if (seen.has(signature)) return;
+      seen.add(signature);
+
+      let last = -1;
+      keys.forEach((k) => {
+        const idx = header.indexOf(k);
+        if (idx === -1) {
+          header.splice(last + 1, 0, k);
+          last += 1;
+        } else {
+          last = idx;
+        }
+      });
+    });
+    return header;
+  }
+
+  // Builds the xlsx buffer with auto-sized columns
   buildProgressWorkbook(rows, sheetName) {
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const header = this.mergeHeaders(rows);
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header });
 
     if (rows.length > 0) {
-      worksheet['!cols'] = Object.keys(rows[0]).map((key) => {
+      worksheet['!cols'] = header.map((key) => {
         const maxLen = Math.max(
           key.length,
           ...rows.slice(0, 100).map((r) => String(r[key] ?? '').length)
@@ -1029,11 +1093,12 @@ class ExcelService {
         .populate('student', 'name enrollmentNo email branch phone')
         .lean();
 
-      const mentor = await User.findById(mentorId).select('name email').lean();
+      const mentor = await User.findById(mentorId).select('name email department').lean();
+      const rubric = await rubricService.getDepartmentRubric(mentor?.department);
 
       const rows = this.sortSubmissionsByEnrollment(
         submissions.filter((s) => s.student)
-      ).map((submission) => this.buildProgressRow(submission, mentor));
+      ).map((submission) => this.buildProgressRow(submission, mentor, false, rubric));
 
       const buffer = this.buildProgressWorkbook(rows, 'Student Progress & Marks');
 
@@ -1677,7 +1742,11 @@ class ExcelService {
       if (branch) studentQuery.branch = branch;
 
       const students = await User.find(studentQuery)
-        .populate('assignedMentor', 'name email department')
+        .populate({
+          path: 'assignedMentor',
+          select: 'name email department',
+          populate: { path: 'department', select: 'name' }
+        })
         .lean();
 
       const studentIds = students.map((s) => s._id);
@@ -1701,11 +1770,15 @@ class ExcelService {
         mentorMap[s._id.toString()] = s.assignedMentor;
       });
 
+      // each department is exported with its own rubric
+      const rubricMap = await this.loadRubricMap(students.map((s) => s.assignedMentor?.department));
+
       const rows = this.sortSubmissionsByEnrollment(
         submissions.filter((s) => s.student)
-      ).map((submission) =>
-        this.buildProgressRow(submission, mentorMap[submission.student._id.toString()], true)
-      );
+      ).map((submission) => {
+        const mentor = mentorMap[submission.student._id.toString()];
+        return this.buildProgressRow(submission, mentor, true, this.pickRubric(rubricMap, mentor?.department));
+      });
 
       const buffer = this.buildProgressWorkbook(rows, 'Student Data');
 
@@ -1729,6 +1802,7 @@ class ExcelService {
         const Department = require('../models/Department');
         const dept = await Department.findById(departmentId).select('name').lean();
         const deptName = dept?.name || 'Department';
+        const rubric = await rubricService.getDepartmentRubric(departmentId);
   
         const mentors = await User.find({ role: 'mentor', department: departmentId })
           .select('name email')
@@ -1766,7 +1840,7 @@ class ExcelService {
         const rows = this.sortSubmissionsByEnrollment(
           submissions.filter((s) => s.student)
         ).map((submission) =>
-          this.buildProgressRow(submission, studentMentor[submission.student._id.toString()] || {}, true)
+          this.buildProgressRow(submission, studentMentor[submission.student._id.toString()] || {}, true, rubric)
         );
   
         const buffer = this.buildProgressWorkbook(rows, 'Student Data');

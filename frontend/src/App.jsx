@@ -12,6 +12,7 @@ import BranchManagement from './components/deptAdmin/BranchManagement'
 
 import DeptMentorManagement from './components/deptAdmin/MentorManagement'
 import AssignStudents from './components/deptAdmin/AssignStudents'   // NEW
+import RubricManagement from './components/deptAdmin/RubricManagement'
 
 // ─── Admin ────────────────────────────────────────────────────────────────
 import DepartmentManagement from './components/admin/DepartmentManagement'
@@ -216,6 +217,11 @@ function App() {
         <Route path="/dept-admin/assign-students" element={
           <ProtectedRoute allowedRoles={['dept_admin']}>
             <AppLayout><AssignStudents /></AppLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/dept-admin/rubric" element={
+          <ProtectedRoute allowedRoles={['dept_admin']}>
+            <AppLayout><RubricManagement /></AppLayout>
           </ProtectedRoute>
         } />
 

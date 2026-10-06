@@ -4,6 +4,7 @@ import { mentorService } from '../../services/mentorService'
 import { formatDateTime, formatCurrency } from '../../utils/helpers'
 import Table from '../common/Table'
 import FileUpload from '../common/FileUpload'
+import RubricMarksForm, { scoresFromResult } from '../common/RubricMarksForm'
 import PlacementReviews from './PlacementReviews'
 import {
   FileText,
@@ -143,343 +144,7 @@ const DocumentLink = ({ url, label, icon: Icon = FileText }) => {
 }
 
 // Marks Input Components (keep existing)
-const MarksInput = ({ label, value, onChange, max, required = false }) => {
-  return (
-    <div className="flex flex-col">
-      <label className="text-sm font-medium text-gray-700 mb-1">
-        {label} {required && <span className="text-red-500">*</span>}
-        <span className="text-gray-500 ml-1">(Max: {max})</span>
-      </label>
-      <input
-        type="number"
-        min="0"
-        max={max}
-        step="0.5"
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-      />
-    </div>
-  );
-};
 
-const RegistrationMarks = ({ marks, setMarks }) => {
-  const updateMarks = (field, value) => {
-    const newMarks = { ...marks, [field]: Math.min(value, getMax(field)) };
-    setMarks(newMarks);
-  };
-
-  const getMax = (field) => {
-    switch (field) {
-      case 'objectiveProblemIdentification':
-      case 'proposedMethodology':
-      case 'relevanceRealWorld':
-      case 'synopsisPresentation':
-        return 5;
-      default:
-        return 0;
-    }
-  };
-
-  const total =
-    (marks.objectiveProblemIdentification || 0) +
-    (marks.proposedMethodology || 0) +
-    (marks.relevanceRealWorld || 0) +
-    (marks.synopsisPresentation || 0);
-
-  return (
-    <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-      <h5 className="font-semibold text-gray-900 mb-4">Preliminary Review Marks Assignment (Max: 20)</h5>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <MarksInput
-          label="Objective/Problem Identification/Topic Selection"
-          value={marks.objectiveProblemIdentification || 0}
-          onChange={(val) => updateMarks('objectiveProblemIdentification', val)}
-          max={5}
-        />
-        <MarksInput
-          label="Proposed Methodology/Technical Details & Timeline"
-          value={marks.proposedMethodology || 0}
-          onChange={(val) => updateMarks('proposedMethodology', val)}
-          max={5}
-        />
-        <MarksInput
-          label="Relevance with Real World Problem"
-          value={marks.relevanceRealWorld || 0}
-          onChange={(val) => updateMarks('relevanceRealWorld', val)}
-          max={5}
-        />
-        <MarksInput
-          label="Synopsis/Presentation"
-          value={marks.synopsisPresentation || 0}
-          onChange={(val) => updateMarks('synopsisPresentation', val)}
-          max={5}
-        />
-      </div>
-
-      <div className="mt-4 pt-4 border-t border-blue-300">
-        <div className="flex justify-between items-center">
-          <span className="font-semibold text-gray-900">Total Preliminary Review Marks:</span>
-          <span className="text-2xl font-bold text-blue-600">{total.toFixed(1)} / 20</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const MPRMarks = ({ marks, setMarks, mprType }) => {
-  const maxMarks = 10;
-
-  return (
-    <div className="bg-purple-50 p-6 rounded-lg border border-purple-200">
-      <h5 className="font-semibold text-gray-900 mb-4">{mprType?.toUpperCase()} Marks (Max: 10)</h5>
-
-      <MarksInput
-        label={`${mprType?.toUpperCase()} Document Quality & Content`}
-        value={marks || 0}
-        onChange={setMarks}
-        max={maxMarks}
-      />
-    </div>
-  );
-};
-
-const MidSemMarks = ({ marks, setMarks, semNumber }) => {
-  const updateMarks = (field, value) => {
-    const newMarks = { ...marks, [field]: Math.min(value, getMax(field)) };
-    setMarks(newMarks);
-  };
-
-  const getMax = (field) => {
-    switch (field) {
-      case 'dailyDiary':
-        return 10;
-      case 'expectedAchievedOutcomes':
-        return 20;
-      case 'briefReport':
-        return 30;
-      case 'presentationViva':
-        return 40;
-      default:
-        return 0;
-    }
-  };
-
-  const total =
-    (marks.dailyDiary || 0) +
-    (marks.expectedAchievedOutcomes || 0) +
-    (marks.briefReport || 0) +
-    (marks.presentationViva || 0);
-
-  return (
-    <div className="bg-indigo-50 p-6 rounded-lg border border-indigo-200">
-      <h5 className="font-semibold text-gray-900 mb-4">Mid Semester {semNumber} Marks (Max: 100)</h5>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <MarksInput
-          label="Internship/Start-up Daily Diary"
-          value={marks.dailyDiary || 0}
-          onChange={(val) => updateMarks('dailyDiary', val)}
-          max={10}
-        />
-        <MarksInput
-          label="Expected/Achieved Outcomes & Social Relevance"
-          value={marks.expectedAchievedOutcomes || 0}
-          onChange={(val) => updateMarks('expectedAchievedOutcomes', val)}
-          max={20}
-        />
-        <MarksInput
-          label="Brief Internship/Start-up Report"
-          value={marks.briefReport || 0}
-          onChange={(val) => updateMarks('briefReport', val)}
-          max={30}
-        />
-        <MarksInput
-          label="Presentation & Viva"
-          value={marks.presentationViva || 0}
-          onChange={(val) => updateMarks('presentationViva', val)}
-          max={40}
-        />
-      </div>
-
-      <div className="mt-4 pt-4 border-t border-indigo-300">
-        <div className="flex justify-between items-center">
-          <span className="font-semibold text-gray-900">Total Mid Sem {semNumber} Marks:</span>
-          <span className="text-2xl font-bold text-indigo-600">{total.toFixed(1)} / 100</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const FinalReportMarks = ({ marks, setMarks }) => {
-  const updateMarks = (field, value) => {
-    const newMarks = { ...marks, [field]: Math.min(value, getMax(field)) };
-    setMarks(newMarks);
-  };
-
-  const getMax = (field) => {
-    switch (field) {
-      case 'dailyDiary':
-        return 20;
-      case 'projectOutcomes':
-        return 30;
-      case 'objectiveLiteratureReview':
-      case 'methodologyArea':
-      case 'workDescription':
-      case 'dataResultDiscussion':
-      case 'overallFormatPlagiarism':
-      case 'defineObjective':
-      case 'contentPresentation':
-      case 'presentationSkill':
-      case 'socialIndustrialRelevance':
-      case 'questionAnswer':
-        return 20;
-      default:
-        return 0;
-    }
-  };
-
-  const reportTotal =
-    (marks.objectiveLiteratureReview || 0) +
-    (marks.methodologyArea || 0) +
-    (marks.workDescription || 0) +
-    (marks.dataResultDiscussion || 0) +
-    (marks.overallFormatPlagiarism || 0);
-
-  const presentationTotal =
-    (marks.defineObjective || 0) +
-    (marks.contentPresentation || 0) +
-    (marks.presentationSkill || 0) +
-    (marks.socialIndustrialRelevance || 0) +
-    (marks.questionAnswer || 0);
-
-  const diaryOutcomesTotal =
-    (marks.dailyDiary || 0) +
-    (marks.projectOutcomes || 0);
-
-  const grandTotal =
-    diaryOutcomesTotal +
-    reportTotal +
-    presentationTotal;
-
-  return (
-    <div className="bg-green-50 p-6 rounded-lg border border-green-200 space-y-6">
-      <h5 className="font-semibold text-gray-900 mb-4">Final Report Marks Assignment (Max: 250)</h5>
-
-      {/* Daily Diary and Outcomes (50 marks) */}
-      <div>
-        <h6 className="font-medium text-gray-900 mb-3">Internship/Start-up Diary & Outcomes (Max: 50)</h6>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <MarksInput
-            label="Internship/Start-up Daily Diary"
-            value={marks.dailyDiary || 0}
-            onChange={(val) => updateMarks('dailyDiary', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Internship/Start-up Outcomes"
-            value={marks.projectOutcomes || 0}
-            onChange={(val) => updateMarks('projectOutcomes', val)}
-            max={30}
-          />
-        </div>
-        <div className="mt-3 text-right">
-          <span className="font-semibold text-green-700">Diary & Outcomes Subtotal: {diaryOutcomesTotal.toFixed(1)} / 50</span>
-        </div>
-      </div>
-
-      {/* Final Report Section (100 marks) */}
-      <div className="border-t border-green-300 pt-4">
-        <h6 className="font-medium text-gray-900 mb-3">Final Report (Max: 100)</h6>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <MarksInput
-            label="Objective & Literature Review"
-            value={marks.objectiveLiteratureReview || 0}
-            onChange={(val) => updateMarks('objectiveLiteratureReview', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Methodology/Area of Internship/Start-up"
-            value={marks.methodologyArea || 0}
-            onChange={(val) => updateMarks('methodologyArea', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Hardware/Software/Work Description"
-            value={marks.workDescription || 0}
-            onChange={(val) => updateMarks('workDescription', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Data Collection/Result/Discussion/Conclusion"
-            value={marks.dataResultDiscussion || 0}
-            onChange={(val) => updateMarks('dataResultDiscussion', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Overall Format & Plagiarism"
-            value={marks.overallFormatPlagiarism || 0}
-            onChange={(val) => updateMarks('overallFormatPlagiarism', val)}
-            max={20}
-          />
-        </div>
-        <div className="mt-3 text-right">
-          <span className="font-semibold text-green-700">Report Subtotal: {reportTotal.toFixed(1)} / 100</span>
-        </div>
-      </div>
-
-      {/* Presentation Section (100 marks) */}
-      <div className="border-t border-green-300 pt-4">
-        <h6 className="font-medium text-gray-900 mb-3">Presentation & Q&A (Max: 100)</h6>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <MarksInput
-            label="Define Objective of the Work"
-            value={marks.defineObjective || 0}
-            onChange={(val) => updateMarks('defineObjective', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Content of the Presentation"
-            value={marks.contentPresentation || 0}
-            onChange={(val) => updateMarks('contentPresentation', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Presentation Skill"
-            value={marks.presentationSkill || 0}
-            onChange={(val) => updateMarks('presentationSkill', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Relevance to Social & Industrial Need"
-            value={marks.socialIndustrialRelevance || 0}
-            onChange={(val) => updateMarks('socialIndustrialRelevance', val)}
-            max={20}
-          />
-          <MarksInput
-            label="Question-Answer"
-            value={marks.questionAnswer || 0}
-            onChange={(val) => updateMarks('questionAnswer', val)}
-            max={20}
-          />
-        </div>
-        <div className="mt-3 text-right">
-          <span className="font-semibold text-green-700">Presentation Subtotal: {presentationTotal.toFixed(1)} / 100</span>
-        </div>
-      </div>
-
-      {/* Grand Total */}
-      <div className="mt-6 pt-4 border-t-2 border-green-400">
-        <div className="flex justify-between items-center">
-          <span className="text-lg font-bold text-gray-900">Grand Total:</span>
-          <span className="text-3xl font-bold text-green-600">{grandTotal.toFixed(1)} / 250</span>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Main Component
 // ─── Registration edit form (mentor side) ────────────────────────────────────
@@ -805,67 +470,31 @@ const RegistrationEditForm = ({
 }
 
 // ─── Review result panel (shown for approved / rejected reviews) ─────────────
-const MARK_FIELDS = {
-  registration: [
-    ['objectiveProblemIdentification', 'Objective / Problem Identification / Topic Selection', 5],
-    ['proposedMethodology', 'Proposed Methodology / Technical Details & Timeline', 5],
-    ['relevanceRealWorld', 'Relevance with Real World Problem', 5],
-    ['synopsisPresentation', 'Synopsis / Presentation', 5]
-  ],
-  midSem: [
-    ['dailyDiary', 'Internship/Start-up Daily Diary', 10],
-    ['expectedAchievedOutcomes', 'Expected/Achieved Outcomes & Social Relevance', 20],
-    ['briefReport', 'Brief Internship/Start-up Report', 30],
-    ['presentationViva', 'Presentation & Viva', 40]
-  ],
-  finalReport: [
-    ['dailyDiary', 'Internship/Start-up Daily Diary', 20],
-    ['projectOutcomes', 'Internship/Start-up Outcomes', 30],
-    ['objectiveLiteratureReview', 'Objective & Literature Review', 20],
-    ['methodologyArea', 'Methodology/Area of Internship/Start-up', 20],
-    ['workDescription', 'Hardware/Software/Work Description', 20],
-    ['dataResultDiscussion', 'Data Collection/Result/Discussion/Conclusion', 20],
-    ['overallFormatPlagiarism', 'Overall Format & Plagiarism', 20],
-    ['defineObjective', 'Define Objective of the Work', 20],
-    ['contentPresentation', 'Content of the Presentation', 20],
-    ['presentationSkill', 'Presentation Skill', 20],
-    ['socialIndustrialRelevance', 'Relevance to Social & Industrial Need', 20],
-    ['questionAnswer', 'Question-Answer', 20]
-  ]
+// ─── Review result panel (shown for approved / rejected reviews) ─────────────
+const getMarksTitle = (submission) => {
+  if (submission.reviewType === 'registration') return 'Initial / Registration Marks'
+  if (submission.reviewType === 'finalReport') return 'Final Report Marks'
+  const t = submission.mprType
+  if (t === 'midSem1' || t === 'midSem2') return 'Mid Semester Marks'
+  return `${(t || 'MPR').toUpperCase()} Marks`
 }
-
-const MARK_TOTALS = { registration: 20, midSem: 100, finalReport: 250, simple: 10 }
 
 const ReviewResultPanel = ({ submission, onUpdated }) => {
   const info = submission.reviewInfo || {}
   const status = info.status || submission.currentReviewStatus
-  const mprType = submission.mprType
+  const stageRubric = info.rubric
+  const savedResult = info.marksResult
 
-  const kind =
-    submission.reviewType === 'registration'
-      ? 'registration'
-      : submission.reviewType === 'finalReport'
-        ? 'finalReport'
-        : mprType === 'midSem1' || mprType === 'midSem2'
-          ? 'midSem'
-          : 'simple'
-
-  const canEditMarks = status === 'approved'
+  const canEditMarks = status === 'approved' && !!stageRubric?.enabled
+  const showMarks = status === 'approved' && (!!savedResult || !!stageRubric?.enabled)
 
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [marks, setMarks] = useState({})
   const [feedback, setFeedback] = useState('')
 
-  const rows = MARK_FIELDS[kind] || []
-  const savedMarks = kind === 'simple' ? { simpleMarks: Number(info.marks) || 0 } : (info.marks || {})
-  const savedTotal =
-    kind === 'simple'
-      ? savedMarks.simpleMarks
-      : rows.reduce((sum, [key]) => sum + (Number(savedMarks[key]) || 0), 0)
-
   const startEdit = () => {
-    setMarks(kind === 'simple' ? { simpleMarks: Number(info.marks) || 0 } : { ...(info.marks || {}) })
+    setMarks(scoresFromResult(savedResult))
     setFeedback(info.feedback || '')
     setEditing(true)
   }
@@ -881,9 +510,7 @@ const ReviewResultPanel = ({ submission, onUpdated }) => {
     setSaving(true)
     try {
       const payload = { feedback }
-      if (canEditMarks) {
-        payload.marks = kind === 'simple' ? Number(marks.simpleMarks) || 0 : marks
-      }
+      if (canEditMarks) payload.marks = marks
 
       const response = await mentorService.updateReviewResult(submission._id, payload)
       if (response?.success) {
@@ -898,6 +525,9 @@ const ReviewResultPanel = ({ submission, onUpdated }) => {
       setSaving(false)
     }
   }
+
+  const rubricChanged =
+    !!savedResult && !!stageRubric && (savedResult.rubricVersion || 0) !== (stageRubric.version || 0)
 
   return (
     <div
@@ -975,51 +605,46 @@ const ReviewResultPanel = ({ submission, onUpdated }) => {
       </div>
 
       {/* Marks */}
-      {canEditMarks && (
+      {showMarks && (
         <div className="mb-4">
-          {editing ? (
+          {editing && canEditMarks ? (
             <>
-              {kind === 'registration' && <RegistrationMarks marks={marks} setMarks={setMarks} />}
-              {kind === 'midSem' && (
-                <MidSemMarks marks={marks} setMarks={setMarks} semNumber={mprType === 'midSem2' ? 2 : 1} />
+              {rubricChanged && (
+                <div className="mb-3 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-2">
+                  These marks were given with an earlier version of the rubric. Saving will re-grade them
+                  using your department's current rubric.
+                </div>
               )}
-              {kind === 'simple' && (
-                <MPRMarks
-                  marks={marks.simpleMarks || 0}
-                  setMarks={(val) => setMarks({ simpleMarks: val })}
-                  mprType={mprType}
-                />
-              )}
-              {kind === 'finalReport' && <FinalReportMarks marks={marks} setMarks={setMarks} />}
+              <RubricMarksForm
+                title={getMarksTitle(submission)}
+                stageRubric={stageRubric}
+                scores={marks}
+                onChange={setMarks}
+              />
             </>
-          ) : (
+          ) : savedResult ? (
             <div className="bg-white p-4 rounded-lg border border-green-200">
               <h5 className="font-semibold text-gray-900 mb-3">Marks Assigned</h5>
-
-              {kind === 'simple' ? (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-700">{mprType?.toUpperCase()} Document Quality & Content</span>
-                  <span className="font-medium text-gray-900">{savedMarks.simpleMarks} / {MARK_TOTALS.simple}</span>
-                </div>
-              ) : (
-                <div className="space-y-2 text-sm">
-                  {rows.map(([key, label, max]) => (
-                    <div key={key} className="flex justify-between border-b border-gray-100 pb-1">
-                      <span className="text-gray-700">{label}</span>
-                      <span className="font-medium text-gray-900">
-                        {Number(savedMarks[key]) || 0} / {max}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
+              <div className="space-y-2 text-sm">
+                {savedResult.items.map((item) => (
+                  <div key={item.key} className="flex justify-between border-b border-gray-100 pb-1">
+                    <span className="text-gray-700">{item.label}</span>
+                    <span className="font-medium text-gray-900">
+                      {Number(item.score) || 0} / {item.max}
+                    </span>
+                  </div>
+                ))}
+              </div>
               <div className="flex justify-between items-center mt-4 pt-3 border-t border-green-200">
                 <span className="font-semibold text-gray-900">Total</span>
                 <span className="text-2xl font-bold text-green-600">
-                  {Number(savedTotal).toFixed(1)} / {MARK_TOTALS[kind]}
+                  {Number(savedResult.total).toFixed(1)} / {savedResult.maxTotal}
                 </span>
               </div>
+            </div>
+          ) : (
+            <div className="bg-white p-4 rounded-lg border border-green-200 text-sm text-gray-600">
+              No marks have been assigned yet. Use “Edit Marks & Feedback” to add them.
             </div>
           )}
         </div>
@@ -1134,19 +759,8 @@ const ReviewSubmissions = () => {
         setEditedData({})
         setEditedFiles({})
 
-        // Initialize marks based on review type
-        if (response.data.reviewType === 'registration') {
-          setMarks(response.data.registrationReview?.marks || {})
-        } else if (response.data.reviewType === 'mpr') {
-          const mprType = response.data.mprType
-          if (mprType === 'midSem1' || mprType === 'midSem2') {
-            setMarks(response.data.mprDetails?.marks || {})
-          } else {
-            setMarks({ simpleMarks: response.data.mprDetails?.marks || 0 })
-          }
-        } else if (response.data.reviewType === 'finalReport') {
-          setMarks(response.data.finalReportReview?.marks || {})
-        }
+        // Marks are keyed by the department rubric's field keys
+        setMarks(scoresFromResult(response.data.reviewInfo?.marksResult))
 
         setShowModal(true)
       } else {
@@ -1239,22 +853,8 @@ const ReviewSubmissions = () => {
         }
       }
 
-      // Prepare marks data based on review type
-      let marksData = null
-      if (reviewAction === 'approve') {
-        if (selectedSubmission.reviewType === 'registration') {
-          marksData = marks
-        } else if (selectedSubmission.reviewType === 'mpr') {
-          const mprType = selectedSubmission.mprType
-          if (mprType === 'midSem1' || mprType === 'midSem2') {
-            marksData = marks
-          } else {
-            marksData = marks.simpleMarks || 0
-          }
-        } else if (selectedSubmission.reviewType === 'finalReport') {
-          marksData = marks
-        }
-      }
+      // Marks object { [fieldKey]: score }; the server validates it against the department rubric
+      const marksData = reviewAction === 'approve' ? marks : null
 
       const response = await execute(() => mentorService.reviewSubmission(
         submissionIdToUse,
@@ -2482,29 +2082,12 @@ const ReviewSubmissions = () => {
                       {/* Marks Assignment - only when Approve is selected */}
                       {reviewAction === 'approve' && (
                         <div className="space-y-6">
-                          {selectedSubmission.reviewType === 'registration' && (
-                            <RegistrationMarks marks={marks} setMarks={setMarks} />
-                          )}
-
-                          {selectedSubmission.reviewType === 'mpr' && (
-                            selectedSubmission.mprType === 'midSem1' || selectedSubmission.mprType === 'midSem2' ? (
-                              <MidSemMarks
-                                marks={marks}
-                                setMarks={setMarks}
-                                semNumber={selectedSubmission.mprType === 'midSem1' ? 1 : 2}
-                              />
-                            ) : (
-                              <MPRMarks
-                                marks={marks.simpleMarks || 0}
-                                setMarks={(val) => setMarks({ simpleMarks: val })}
-                                mprType={selectedSubmission.mprType}
-                              />
-                            )
-                          )}
-
-                          {selectedSubmission.reviewType === 'finalReport' && (
-                            <FinalReportMarks marks={marks} setMarks={setMarks} />
-                          )}
+                          <RubricMarksForm
+                            title={getMarksTitle(selectedSubmission)}
+                            stageRubric={selectedSubmission.reviewInfo?.rubric}
+                            scores={marks}
+                            onChange={setMarks}
+                          />
                         </div>
                       )}
 

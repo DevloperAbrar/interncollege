@@ -53,6 +53,7 @@ const NAVIGATION = {
     { name: 'Branches',           path: '/dept-admin/branches',          icon: 'GitBranch' },
     { name: 'Mentors',            path: '/dept-admin/mentors',           icon: 'UserCheck' },
     { name: 'Assign Students',    path: '/dept-admin/assign-students',   icon: 'UserPlus' },   // NEW
+    { name: 'Marks Rubric',       path: '/dept-admin/rubric',            icon: 'FileCheck' },
     { name: 'Student Progress',   path: '/dept-admin/student-progress',  icon: 'Activity' },
   ],
   mentor: [

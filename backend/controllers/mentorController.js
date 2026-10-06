@@ -4,6 +4,7 @@ const excelService = require('../services/excelService');
 const emailService = require('../services/emailService');
 const { successResponse, errorResponse, getPaginationData } = require('../utils/responseHelper');
 const googleDriveService = require('../services/googleDriveService');
+const rubricService = require('../services/rubricService');
 
 // ─── Resolve (or create) this mentor's own folder inside the centralized Drive ──
 // ─── Resolve (or create) this mentor's own folder inside the centralized Drive ──
@@ -820,9 +821,25 @@ const reviewSubmission = async (req, res) => {
       status: action === 'approve' ? 'approved' : 'rejected'
     };
 
-    // Add marks if provided and approved
-    if (action === 'approve' && marks) {
-      reviewData.marks = marks;
+    // Marks are validated against the mentor's department rubric
+    if (action === 'approve') {
+      const reviewKey = mprType
+        ? mprType
+        : ['final_report_pending', 'final_report_rejected'].includes(submission.currentStep)
+          ? 'finalReport'
+          : 'registration';
+      const stage = rubricService.stageForReview(reviewKey);
+      if (!stage) return errorResponse(res, 'Invalid review type', 400);
+
+      const stageRubric = await rubricService.getStageRubric(mentorDepartmentId(req.user), stage);
+      if (stageRubric.enabled) {
+        try {
+          reviewData.rubricResult = rubricService.buildResult(stageRubric, marks);
+        } catch (e) {
+          if (e.status === 400) return errorResponse(res, e.message, 400);
+          throw e;
+        }
+      }
     }
 
     // Handle different review types
@@ -832,10 +849,12 @@ const reviewSubmission = async (req, res) => {
         return errorResponse(res, 'MPR submission not found', 404);
       }
 
-      submission.mprSubmissions[mprType] = {
-        ...submission.mprSubmissions[mprType],
-        ...reviewData
-      };
+      const mprEntry = submission.mprSubmissions[mprType];
+      mprEntry.status = reviewData.status;
+      mprEntry.feedback = reviewData.feedback;
+      mprEntry.reviewedAt = reviewData.reviewedAt;
+      mprEntry.reviewedBy = reviewData.reviewedBy;
+      if (reviewData.rubricResult) mprEntry.rubricResult = reviewData.rubricResult;
 
       // ✅ CRITICAL FIX: Check if all 5 MPRs are approved
       const allMPRTypes = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
@@ -1368,57 +1387,14 @@ const getAssignedSubmissions = async (req, res) => {
 const MPR_TYPES = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
 
 // Max marks per field (must match the marks forms in ReviewSubmissions.jsx)
-const MARK_LIMITS = {
-  registration: {
-    objectiveProblemIdentification: 5,
-    proposedMethodology: 5,
-    relevanceRealWorld: 5,
-    synopsisPresentation: 5
-  },
-  midSem1: {
-    dailyDiary: 10,
-    expectedAchievedOutcomes: 20,
-    briefReport: 30,
-    presentationViva: 40
-  },
-  finalReport: {
-    dailyDiary: 20,
-    projectOutcomes: 30,
-    objectiveLiteratureReview: 20,
-    methodologyArea: 20,
-    workDescription: 20,
-    dataResultDiscussion: 20,
-    overallFormatPlagiarism: 20,
-    defineObjective: 20,
-    contentPresentation: 20,
-    presentationSkill: 20,
-    socialIndustrialRelevance: 20,
-    questionAnswer: 20
-  }
-};
-const SIMPLE_MPR_MAX = 10;
+// Department that decides which marks rubric applies (mentors carry their department)
+const mentorDepartmentId = (user) => user?.department?._id || user?.department || null;
 
 const resolveReviewerName = async (reviewer) => {
   if (!reviewer) return '';
   if (reviewer.name) return reviewer.name;
   const user = await User.findById(reviewer._id || reviewer).select('name');
   return user?.name || '';
-};
-
-const cleanMarks = (limits, input) => {
-  if (!input || typeof input !== 'object') {
-    throw Object.assign(new Error('Marks are required'), { status: 400 });
-  }
-  const cleaned = {};
-  Object.entries(limits).forEach(([field, max]) => {
-    const raw = input[field];
-    const value = raw === undefined || raw === '' || raw === null ? 0 : Number(raw);
-    if (Number.isNaN(value) || value < 0 || value > max) {
-      throw Object.assign(new Error(`${field} must be between 0 and ${max}`), { status: 400 });
-    }
-    cleaned[field] = value;
-  });
-  return cleaned;
 };
 
 const buildRegistrationDetails = (plain) => {
@@ -1477,7 +1453,8 @@ const getSubmissionDetails = async (req, res) => {
       }
 
       const reviewerName = await resolveReviewerName(mprData.reviewedBy);
-
+      const mprStage = rubricService.stageForReview(suffix);
+      const mprRubric = await rubricService.getStageRubric(mentorDepartmentId(req.user), mprStage);
       return successResponse(res, {
         _id: id,
         originalSubmissionId: plain._id,
@@ -1518,7 +1495,9 @@ const getSubmissionDetails = async (req, res) => {
           feedback: mprData.feedback || '',
           reviewedAt: mprData.reviewedAt,
           reviewedByName: reviewerName,
-          marks: mprData.marks ?? null
+          marks: mprData.marks ?? null,
+          rubric: mprRubric,
+          marksResult: rubricService.readResult(mprData, mprStage)
         }
       }, 'MPR submission details retrieved successfully');
     }
@@ -1543,7 +1522,7 @@ const getSubmissionDetails = async (req, res) => {
 
     const review = reviewType === 'registration' ? plain.registrationReview : plain.finalReportReview;
     const reviewerName = await resolveReviewerName(review?.reviewedBy);
-
+    const reviewRubric = await rubricService.getStageRubric(mentorDepartmentId(req.user), reviewType);
     const submissionData = {
       ...plain,
       // History items keep their composite id so reload / edit / marks update hit the right review
@@ -1580,7 +1559,9 @@ const getSubmissionDetails = async (req, res) => {
         feedback: review?.feedback || '',
         reviewedAt: review?.reviewedAt,
         reviewedByName: reviewerName,
-        marks: review?.marks || null
+        marks: review?.marks || null,
+        rubric: reviewRubric,
+        marksResult: rubricService.readResult(review, reviewType)
       }
     };
 
@@ -1647,24 +1628,26 @@ const updateReviewResult = async (req, res) => {
       review.feedback = text;
     }
 
-    // Marks (approved reviews only)
+    // Marks (approved reviews only) — re-graded against the department's current rubric
     if (marks !== undefined && marks !== null) {
       if (review.status !== 'approved') {
         return errorResponse(res, 'Marks can only be edited for approved reviews', 400);
       }
 
+      const stage = rubricService.stageForReview(suffix);
+      const stageRubric = await rubricService.getStageRubric(mentorDepartmentId(req.user), stage);
+      if (!stageRubric.enabled) {
+        return errorResponse(res, 'Marks are turned off for this stage in your department', 400);
+      }
+
+      const result = rubricService.buildResult(stageRubric, marks); // throws status 400 on bad input
+
       if (suffix === 'registration') {
-        submission.registrationReview.marks = cleanMarks(MARK_LIMITS.registration, marks);
+        submission.registrationReview.rubricResult = result;
       } else if (suffix === 'finalReport') {
-        submission.finalReportReview.marks = cleanMarks(MARK_LIMITS.finalReport, marks);
-      } else if (suffix === 'midSem1') {
-        submission.mprSubmissions.midSem1.marks = cleanMarks(MARK_LIMITS.midSem1, marks);
+        submission.finalReportReview.rubricResult = result;
       } else {
-        const value = Number(marks);
-        if (Number.isNaN(value) || value < 0 || value > SIMPLE_MPR_MAX) {
-          return errorResponse(res, `Marks must be between 0 and ${SIMPLE_MPR_MAX}`, 400);
-        }
-        submission.mprSubmissions[suffix].marks = value;
+        submission.mprSubmissions[suffix].rubricResult = result;
       }
     }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { studentService } from '../services/studentService'
 import api from '../services/api'
@@ -91,6 +92,7 @@ const getStepStatus = (submission, stepKey) => {
 }
 
 // ─── Submission progress block ────────────────────────────────────────────────
+// ─── Submission progress block ────────────────────────────────────────────────
 const SubmissionSteps = ({ submission }) => {
   const needsMPR = ['7th_internship', '8th_internship', '8th_project'].includes(submission.semesterType)
   const isCompleted = submission.currentStep === 'completed'
@@ -126,17 +128,36 @@ const SubmissionSteps = ({ submission }) => {
       ...(showPlacement ? [placementStep] : [])
     ]
 
+  const statuses = steps.map(({ key }) => getStepStatus(submission, key))
+  const doneCount = statuses.filter((s) => s === 'approved' || s === 'completed').length
+  const percent = Math.round((doneCount / steps.length) * 100)
+
+  // animate the bar from 0 once the card has mounted
+  const [barWidth, setBarWidth] = useState(0)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setBarWidth(percent))
+    return () => cancelAnimationFrame(raf)
+  }, [percent])
+
+  // full class names so Tailwind picks them up
+  const gridCols =
+    steps.length <= 3
+      ? 'grid-cols-1 sm:grid-cols-3'
+      : steps.length <= 4
+        ? 'grid-cols-2 sm:grid-cols-4'
+        : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7'
+
   return (
-    <div className="rounded-xl border border-gray-200 overflow-hidden">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* Sem header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200 flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-700">
             {SEM_LABEL[submission.semesterType] || submission.semesterType}
           </span>
           <OverallBadge status={overallStatus} />
         </div>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-slate-400">
           Started {fmtDate(submission.createdAt)}
           {isCompleted && submission.completedAt && <> · Completed {fmtDate(submission.completedAt)}</>}
         </span>
@@ -144,35 +165,49 @@ const SubmissionSteps = ({ submission }) => {
 
       {/* Company / project */}
       {(submission.registrationData?.companyName || submission.registrationData?.projectTitle) && (
-        <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2">
-          <Building className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-          <span className="text-xs text-gray-600">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5 sm:px-5">
+          <Building className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+          <span className="min-w-0 break-words text-xs text-slate-600">
             {submission.registrationData?.companyName || submission.registrationData?.projectTitle}
             {submission.registrationData?.internshipType && (
-              <span className="ml-2 text-gray-400">· {submission.registrationData.internshipType}</span>
+              <span className="ml-2 text-slate-400">· {submission.registrationData.internshipType}</span>
             )}
           </span>
         </div>
       )}
 
-      {/* Steps grid */}
-      <div className="p-4 bg-white">
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
-        >
-          {steps.map(({ key, label }) => {
-            const status = getStepStatus(submission, key)
+      <div className="space-y-4 p-4 sm:p-5">
+        {/* Overall bar */}
+        <div>
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="font-medium text-slate-600">{doneCount} of {steps.length} steps done</span>
+            <span className="font-semibold text-indigo-600">{percent}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
+              style={{ width: `${barWidth}%`, transition: 'width 1.1s cubic-bezier(0.22, 1, 0.36, 1)' }}
+            />
+          </div>
+        </div>
+
+        {/* Steps */}
+        <div className={`grid gap-3 ${gridCols}`}>
+          {steps.map(({ key, label }, i) => {
+            const status = statuses[i]
             const cfg = STATUS_CFG[status] || STATUS_CFG.not_started
             const Icon = cfg.icon
             return (
               <div
                 key={key}
-                className={`flex flex-col items-center gap-2 p-3 rounded-xl border ${cfg.bg} ${cfg.border}`}
+                className={`st-fade-up flex flex-row items-center gap-3 rounded-xl border p-3 sm:flex-col sm:gap-2 sm:text-center ${cfg.bg} ${cfg.border}`}
+                style={{ '--d': `${i * 70}ms` }}
               >
-                <Icon className={`h-5 w-5 ${cfg.text}`} />
-                <span className={`text-xs font-semibold ${cfg.text} text-center leading-tight`}>{label}</span>
-                <span className={`text-xs ${cfg.text} opacity-80 text-center leading-tight`}>{cfg.label}</span>
+                <Icon className={`h-5 w-5 flex-shrink-0 ${cfg.text}`} />
+                <div className="min-w-0">
+                  <span className={`block text-xs font-semibold leading-tight ${cfg.text}`}>{label}</span>
+                  <span className={`block text-xs leading-tight opacity-80 ${cfg.text}`}>{cfg.label}</span>
+                </div>
               </div>
             )
           })}
@@ -181,6 +216,13 @@ const SubmissionSteps = ({ submission }) => {
     </div>
   )
 }
+
+// Loading placeholder for the student's own progress page
+const MyProgressSkeleton = () => (
+  <div className="space-y-4" aria-busy="true" aria-label="Loading progress">
+    <div className="st-skeleton h-72 rounded-2xl sm:h-60" />
+  </div>
+)
 
 // ─── Student card ─────────────────────────────────────────────────────────────
 const StudentCard = ({ student, submissions, lastLogin }) => {
@@ -317,22 +359,57 @@ const StudentProgressPage = () => {
 
   // Student's own view
   if (role === 'student') {
-    const myRow = rows[0]
+    const subs = rows[0]?.submissions || []
+    const completedCount = subs.filter((s) => s.currentStep === 'completed').length
+    const activeCount = subs.length - completedCount
+
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Progress</h1>
-          <p className="text-gray-600">Track all your submission steps</p>
+        <div className="st-fade-up">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">My Progress</h1>
+          <p className="mt-1 text-sm text-slate-500 sm:text-base">Track every step of your submissions in one place</p>
         </div>
-        {loading ? <LoadingSkeleton /> : !myRow?.submissions.length ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
-            <Activity className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No submissions yet.</p>
+
+        {!loading && subs.length > 0 && (
+          <div className="st-fade-up flex flex-wrap gap-2" style={{ '--d': '80ms' }}>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+              <Activity className="h-3.5 w-3.5 text-indigo-500" /> {subs.length} submission{subs.length > 1 ? 's' : ''}
+            </span>
+            {activeCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                <Clock className="h-3.5 w-3.5" /> {activeCount} active
+              </span>
+            )}
+            {completedCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                <CheckCircle className="h-3.5 w-3.5" /> {completedCount} completed
+              </span>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <MyProgressSkeleton />
+        ) : !subs.length ? (
+          <div className="st-pop rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+            <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-slate-100 text-slate-400">
+              <Activity className="h-7 w-7" />
+            </span>
+            <p className="mt-4 font-medium text-slate-900">No submissions yet</p>
+            <p className="mx-auto mt-1 max-w-xs text-sm text-slate-500">
+              Once you register, every step of your journey will show up here.
+            </p>
+            <Link
+              to="/student/dashboard"
+              className="mt-5 inline-flex items-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+            >
+              Go to dashboard
+            </Link>
           </div>
         ) : (
           <div className="space-y-4">
-            {myRow.submissions.map(sub => (
-              <div key={sub._id} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            {subs.map((sub, i) => (
+              <div key={sub._id} className="st-fade-up" style={{ '--d': `${120 + i * 90}ms` }}>
                 <SubmissionSteps submission={sub} />
               </div>
             ))}

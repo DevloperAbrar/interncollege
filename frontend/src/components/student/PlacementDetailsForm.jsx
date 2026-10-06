@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { studentService } from '../../services/studentService'
 import { formatDateTime } from '../../utils/helpers'
+import FileUpload from '../common/FileUpload'
 import { ArrowLeft } from 'lucide-react'
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2 MB
 
 const PLACEMENT_TYPES = [
   { value: 'off_campus', label: 'Off campus' },
@@ -26,12 +29,13 @@ const EXAM_LABEL = { none: 'None', gate: 'GATE', cat: 'CAT', gre: 'GRE', other: 
 const PLAN_LABEL = Object.fromEntries(NEXT_PLANS.map((p) => [p.value, p.label]))
 const TYPE_LABEL = Object.fromEntries(PLACEMENT_TYPES.map((p) => [p.value, p.label]))
 
+const MPR_SEMESTERS = ['7th_internship', '8th_internship', '8th_project']
+
 const EMPTY_FORM = {
   hasPlacement: '',
   placementType: '',
   companyName: '',
   packageLPA: '',
-  offerProof: '',
   nextPlan: '',
   clearedExams: [],
   clearedExamOther: '',
@@ -64,6 +68,22 @@ const examsToText = (details) =>
     .map((e) => (e === 'other' ? `Other exam (${details.clearedExamOther || ''})` : EXAM_LABEL[e] || e))
     .join(', ')
 
+const OfferLetterValue = ({ details }) => {
+  if (details.offerProofDocument) {
+    return (
+      <a
+        href={details.offerProofDocument}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:text-blue-800 underline"
+      >
+        View uploaded offer letter (PDF)
+      </a>
+    )
+  }
+  return details.offerProof || '-'
+}
+
 const PlacementDetailsSummary = ({ details }) => {
   const placed = details.hasPlacement === true
   const hasExam = (details.clearedExams || []).some((e) => e !== 'none')
@@ -73,7 +93,7 @@ const PlacementDetailsSummary = ({ details }) => {
       {placed && <SummaryRow label="Placed off campus or close campus?" value={TYPE_LABEL[details.placementType]} />}
       {placed && <SummaryRow label="Name of company" value={details.companyName} />}
       <SummaryRow label="Placement package (yearly, in lakhs)" value={String(details.packageLPA ?? 0)} />
-      {placed && <SummaryRow label="Offer letter or proof" value={details.offerProof} />}
+      {placed && <SummaryRow label="Offer letter or proof" value={<OfferLetterValue details={details} />} />}
       <SummaryRow label="Higher study or job preparation?" value={PLAN_LABEL[details.nextPlan]} />
       <SummaryRow label="Cleared GATE / CAT / GRE or other exam?" value={examsToText(details)} />
       {hasExam && <SummaryRow label="Score card details" value={details.scoreCardDetails} />}
@@ -87,9 +107,11 @@ const PlacementDetailsForm = () => {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
+  const [offerFile, setOfferFile] = useState(null)
   const [errors, setErrors] = useState({})
   const [generalError, setGeneralError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [uploadPercent, setUploadPercent] = useState(0)
 
   useEffect(() => {
     loadData()
@@ -111,7 +133,6 @@ const PlacementDetailsForm = () => {
           placementType: pd.placementType || '',
           companyName: pd.companyName || '',
           packageLPA: pd.hasPlacement && pd.packageLPA ? String(pd.packageLPA) : '',
-          offerProof: pd.offerProof || '',
           nextPlan: pd.nextPlan || '',
           clearedExams: pd.clearedExams || [],
           clearedExamOther: pd.clearedExamOther || '',
@@ -131,6 +152,11 @@ const PlacementDetailsForm = () => {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: undefined }))
   }
 
+  const handleOfferFile = (file) => {
+    setOfferFile(file)
+    if (errors.offerProofDocument) setErrors((prev) => ({ ...prev, offerProofDocument: undefined }))
+  }
+
   const toggleExam = (value) => {
     setForm((prev) => {
       let next
@@ -148,6 +174,7 @@ const PlacementDetailsForm = () => {
   const placed = form.hasPlacement === 'yes'
   const hasExam = form.clearedExams.some((e) => e !== 'none')
   const hasOtherExam = form.clearedExams.includes('other')
+  const existingDocument = state?.placementDetails?.offerProofDocument || ''
 
   const validate = () => {
     const e = {}
@@ -160,7 +187,9 @@ const PlacementDetailsForm = () => {
       if (form.packageLPA === '' || Number.isNaN(pkg) || pkg <= 0) {
         e.packageLPA = 'Enter the yearly package in lakhs (greater than 0)'
       }
-      if (form.offerProof.trim().length < 3) e.offerProof = 'Enter the offer letter reference or proof details'
+      if (!offerFile && !existingDocument) {
+        e.offerProofDocument = 'Upload the offer letter or proof as a PDF (max 2 MB)'
+      }
     }
 
     if (!form.nextPlan) e.nextPlan = 'Please select one option'
@@ -183,21 +212,24 @@ const PlacementDetailsForm = () => {
       return
     }
 
-    const payload = {
-      hasPlacement: placed,
-      placementType: placed ? form.placementType : undefined,
-      companyName: placed ? form.companyName.trim() : '',
-      packageLPA: placed ? Number(form.packageLPA) : 0,
-      offerProof: placed ? form.offerProof.trim() : '',
-      nextPlan: form.nextPlan,
-      clearedExams: form.clearedExams,
-      clearedExamOther: hasOtherExam ? form.clearedExamOther.trim() : '',
-      scoreCardDetails: hasExam ? form.scoreCardDetails.trim() : ''
+    const fd = new FormData()
+    fd.append('hasPlacement', placed ? 'true' : 'false')
+    if (placed) {
+      fd.append('placementType', form.placementType)
+      fd.append('companyName', form.companyName.trim())
+      fd.append('packageLPA', String(Number(form.packageLPA)))
+      if (offerFile) fd.append('offerProofDocument', offerFile)
     }
+    fd.append('nextPlan', form.nextPlan)
+    fd.append('clearedExams', JSON.stringify(form.clearedExams))
+    fd.append('clearedExamOther', hasOtherExam ? form.clearedExamOther.trim() : '')
+    fd.append('scoreCardDetails', hasExam ? form.scoreCardDetails.trim() : '')
 
     try {
       setSubmitting(true)
-      await studentService.submitPlacementDetails(payload)
+      setUploadPercent(0)
+      await studentService.submitPlacementDetails(fd, setUploadPercent)
+      setOfferFile(null)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       await loadData()
     } catch (error) {
@@ -249,9 +281,9 @@ const PlacementDetailsForm = () => {
       <div className="max-w-3xl mx-auto py-8 px-4 space-y-4">
         {backButton}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h1 className="text-lg font-semibold text-gray-900 mb-2">Placement details</h1>
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Placement record details</h1>
           <p className="text-sm text-gray-600">
-            {state?.reason || 'This form opens after your final report is approved by your mentor.'}
+            {state?.reason || 'This form opens after your mentor approves your MPR documents and the Mid Sem evaluation.'}
           </p>
         </div>
       </div>
@@ -259,6 +291,10 @@ const PlacementDetailsForm = () => {
   }
 
   const pd = state.placementDetails
+  const isMprFlow = MPR_SEMESTERS.includes(state.semesterType)
+  const afterApprovalText = isMprFlow
+    ? 'your final report unlocks'
+    : 'your internship is marked complete'
 
   // Submitted, waiting for the mentor
   if (!state.canEdit) {
@@ -267,11 +303,10 @@ const PlacementDetailsForm = () => {
         {backButton}
         <div className="bg-white border border-gray-200 rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h1 className="text-lg font-semibold text-gray-900">Placement details</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Placement record details</h1>
             <p className="text-sm text-gray-600 mt-1">
               Submitted{pd?.submittedAt ? ` on ${formatDateTime(pd.submittedAt)}` : ''}. Your mentor is verifying
-              these details. Your {state.semesterType?.includes('project') ? 'project' : 'internship'} is marked
-              complete once they are approved.
+              these details. Once they are approved, {afterApprovalText}.
             </p>
           </div>
           <div className="px-6">{pd && <PlacementDetailsSummary details={pd} />}</div>
@@ -286,11 +321,9 @@ const PlacementDetailsForm = () => {
 
       <div className="bg-white border border-gray-200 rounded-lg">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h1 className="text-lg font-semibold text-gray-900">Placement and future plan details</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Placement record details</h1>
           <p className="text-sm text-gray-600 mt-1">
-            This is the last step. Fill it in honestly. Your mentor verifies it, and only then your{' '}
-            {state.semesterType?.includes('project') ? 'project' : 'internship'} is marked complete. Nothing needs to
-            be uploaded here.
+            Fill this in honestly. Your mentor verifies it, and once it is approved, {afterApprovalText}.
           </p>
         </div>
 
@@ -379,20 +412,32 @@ const PlacementDetailsForm = () => {
                 />
               </Field>
 
-              {/* 5 */}
-              <Field
-                label="Company placement offer letter or any proof (email)"
-                hint="Type the offer letter reference, the email it came from, or a link. No file upload is needed."
-                error={errors.offerProof}
-              >
-                <textarea
-                  rows={3}
-                  value={form.offerProof}
-                  onChange={(e) => setField('offerProof', e.target.value)}
-                  maxLength={500}
-                  className={inputClass(errors.offerProof)}
+              {/* 5: PDF upload */}
+              <div id="field-offerProofDocument">
+                {existingDocument && (
+                  <p className="text-sm text-gray-600 mb-2">
+                    Currently uploaded:{' '}
+                    <a
+                      href={existingDocument}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      View file
+                    </a>
+                    . Upload a new PDF only if you want to replace it.
+                  </p>
+                )}
+                <FileUpload
+                  onFileSelect={handleOfferFile}
+                  accept=".pdf"
+                  allowedTypes={['pdf']}
+                  maxSize={MAX_FILE_SIZE}
+                  label="Company placement offer letter or any proof (email)"
+                  required={!existingDocument}
+                  error={errors.offerProofDocument}
                 />
-              </Field>
+              </div>
             </>
           )}
 
@@ -465,7 +510,7 @@ const PlacementDetailsForm = () => {
           {hasExam && (
             <Field
               label="Score card details (GATE / CAT / GRE / other exam)"
-              hint="Write the exam, year and your score or rank. No file upload is needed."
+              hint="Write the exam, year and your score or rank."
               error={errors.scoreCardDetails}
             >
               <textarea
@@ -491,7 +536,9 @@ const PlacementDetailsForm = () => {
               disabled={submitting}
               className="px-5 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {submitting ? 'Submitting...' : 'Submit for verification'}
+              {submitting
+                ? (uploadPercent > 0 && uploadPercent < 100 ? `Uploading ${uploadPercent}%` : 'Submitting...')
+                : 'Submit for verification'}
             </button>
           </div>
         </form>

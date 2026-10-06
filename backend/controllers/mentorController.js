@@ -847,10 +847,14 @@ const reviewSubmission = async (req, res) => {
 
       // ✅ If all 5 MPRs are approved, student can submit final report
       if (approvedMPRs.length === 4) {
-        console.log('🎉 All 4 MPRs approved! Student can now submit final report');
+        console.log('🎉 All 4 MPRs approved! Student can now fill placement record details');
         submission.hasPendingMPRReviews = false;
-        // ✅ CRITICAL: update currentStep so frontend unlocks final report
-        submission.currentStep = 'registration_approved';
+        // Placement record details come BEFORE the final report
+        if (!submission.finalReport?.submittedAt) {
+          submission.currentStep = submission.placementDetails?.status === 'approved'
+            ? 'final_report_pending'
+            : 'placement_pending';
+        }
       }
       
 
@@ -885,11 +889,16 @@ const reviewSubmission = async (req, res) => {
         submission.finalReportReview = reviewData;
 
         if (action === 'approve') {
-          // The submission is NOT completed yet. The student must now fill the
-          // placement details form, and it is completed only after the mentor
-          // verifies that form (see placementController.reviewPlacementDetails).
-          submission.currentStep = 'placement_pending';
-          submission.status = 'approved';
+          // MPR flow: placement record was already approved, so the submission is complete.
+          // Internships without MPRs: the student fills the placement record next.
+          if (submission.placementDetails?.status === 'approved') {
+            submission.currentStep = 'completed';
+            submission.status = 'completed';
+            submission.completedAt = new Date();
+          } else {
+            submission.currentStep = 'placement_pending';
+            submission.status = 'approved';
+          }
         } else {
           submission.currentStep = 'final_report_rejected';
         }
@@ -1006,9 +1015,12 @@ const approveMPR = async (req, res) => {
     // Check if all MPRs are now approved
     const allMPRApproved = submission.areAllMPRSubmissionsApproved();
 
-    // If all MPRs are approved, move to final report phase
-    if (allMPRApproved) {
-      submission.currentStep = 'final_report_pending';
+    // If all MPRs are approved, the student fills the placement record details next.
+    // The final report unlocks only after the mentor approves those.
+    if (allMPRApproved && !submission.finalReport?.submittedAt) {
+      submission.currentStep = submission.placementDetails?.status === 'approved'
+        ? 'final_report_pending'
+        : 'placement_pending';
     }
 
     await submission.save();
@@ -1188,10 +1200,16 @@ const approveFinalReport = async (req, res) => {
     // Update final report status
     submission.finalReport.status = 'approved';
 
-    // Not completed yet: the student fills the placement details form next,
-    // and the submission is completed once the mentor verifies that form.
-    submission.currentStep = 'placement_pending';
-    submission.status = 'approved';
+    // MPR flow: placement record was already approved, so the submission is complete.
+    // Internships without MPRs: the student fills the placement record next.
+    if (submission.placementDetails?.status === 'approved') {
+      submission.currentStep = 'completed';
+      submission.status = 'completed';
+      submission.completedAt = new Date();
+    } else {
+      submission.currentStep = 'placement_pending';
+      submission.status = 'approved';
+    }
 
     await submission.save();
 
@@ -1207,8 +1225,15 @@ const approveFinalReport = async (req, res) => {
       console.error('Email notification error:', emailError);
     }
 
-    console.log(`✅ Final report approved for ${submission.student.name}, waiting for placement details`);
-    successResponse(res, submission, 'Final report approved. Student must now submit placement details.');
+    const isCompleted = submission.currentStep === 'completed';
+    console.log(`✅ Final report approved for ${submission.student.name}, next step: ${submission.currentStep}`);
+    successResponse(
+      res,
+      submission,
+      isCompleted
+        ? 'Final report approved. Submission marked as completed.'
+        : 'Final report approved. Student must now submit placement record details.'
+    );
   } catch (error) {
     console.error('❌ Approve final report error:', error);
     errorResponse(res, 'Failed to approve final report', 500);

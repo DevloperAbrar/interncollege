@@ -9,11 +9,11 @@ import {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const SEM_LABEL = {
-  any_internship:   'Any Internship',
+  any_internship: 'Any Internship',
   '6th_internship': '6th Sem Internship',
   '7th_internship': '7th Sem Internship',
   '8th_internship': '8th Sem Internship',
-  '8th_project':    '8th Sem Project',
+  '8th_project': '8th Sem Project',
 }
 
 const fmtDate = (d) =>
@@ -36,12 +36,12 @@ const resolveBranch = (branch) => {
 
 // ─── Status configs ───────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  completed:   { bg: 'bg-green-50',  border: 'border-green-300',  text: 'text-green-800',  icon: CheckCircle,  label: 'Completed'    },
-  approved:    { bg: 'bg-green-50',  border: 'border-green-300',  text: 'text-green-800',  icon: CheckCircle,  label: 'Approved'     },
-  pending:     { bg: 'bg-amber-50',  border: 'border-amber-300',  text: 'text-amber-800',  icon: Clock,        label: 'Under Review' },
-  in_progress: { bg: 'bg-blue-50',   border: 'border-blue-300',   text: 'text-blue-800',   icon: Clock,        label: 'In Progress'  },
-  rejected:    { bg: 'bg-red-50',    border: 'border-red-300',    text: 'text-red-800',    icon: XCircle,      label: 'Rejected'     },
-  not_started: { bg: 'bg-gray-50',   border: 'border-gray-200',   text: 'text-gray-400',   icon: AlertCircle,  label: 'Not Started'  },
+  completed: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-800', icon: CheckCircle, label: 'Completed' },
+  approved: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-800', icon: CheckCircle, label: 'Approved' },
+  pending: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-800', icon: Clock, label: 'Under Review' },
+  in_progress: { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800', icon: Clock, label: 'In Progress' },
+  rejected: { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-800', icon: XCircle, label: 'Rejected' },
+  not_started: { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-400', icon: AlertCircle, label: 'Not Started' },
 }
 
 const OverallBadge = ({ status }) => {
@@ -66,7 +66,7 @@ const getStepStatus = (submission, stepKey) => {
     if (currentStep === 'registration_pending') return 'pending'
     return 'not_started'
   }
-  if (['mpr1','mpr2','mpr3','midSem1'].includes(stepKey)) {
+  if (['mpr1', 'mpr2', 'mpr3', 'midSem1'].includes(stepKey)) {
     const m = mprSubmissions?.[stepKey]
     if (!m?.document) return 'not_started'
     return m.status === 'approved' ? 'approved' : m.status === 'rejected' ? 'rejected' : 'pending'
@@ -84,7 +84,7 @@ const getStepStatus = (submission, stepKey) => {
     if (currentStep === 'completed') return 'completed'
     if (s === 'approved') return 'approved'
     if (s === 'rejected') return 'rejected'
-    if (currentStep === 'final_report_pending') return 'pending'
+    if (currentStep === 'final_report_pending') return submission.finalReport?.submittedAt ? 'pending' : 'in_progress'
     return 'not_started'
   }
   return 'not_started'
@@ -92,34 +92,39 @@ const getStepStatus = (submission, stepKey) => {
 
 // ─── Submission progress block ────────────────────────────────────────────────
 const SubmissionSteps = ({ submission }) => {
-  const needsMPR = ['7th_internship','8th_internship','8th_project'].includes(submission.semesterType)
+  const needsMPR = ['7th_internship', '8th_internship', '8th_project'].includes(submission.semesterType)
   const isCompleted = submission.currentStep === 'completed'
 
   const overallStatus = isCompleted ? 'completed'
     : submission.currentStep?.includes('rejected') ? 'rejected'
-    : submission.currentStep?.includes('pending') ? 'pending'
-    : 'in_progress'
+      : submission.currentStep?.includes('pending') ? 'pending'
+        : 'in_progress'
 
-  const baseSteps = needsMPR
-    ? [
-        { key: 'registration', label: 'Initial Reg.' },
-        { key: 'mpr1',         label: 'MPR 1' },
-        { key: 'mpr2',         label: 'MPR 2' },
-        { key: 'mpr3',         label: 'MPR 3' },
-        { key: 'midSem1',      label: 'Mid Sem' },
-        { key: 'final_report', label: 'Final Report' },
-      ]
-    : [
-        { key: 'registration', label: 'Initial Reg.' },
-        { key: 'final_report', label: 'Final Report' },
-      ]
+  const regStep = { key: 'registration', label: 'Initial Reg.' }
+  const finalStep = { key: 'final_report', label: 'Final Report' }
+  const placementStep = { key: 'placement', label: 'Placement Record' }
 
   // Placement step shows for running submissions and for any that have placement data.
   // Submissions completed before this step existed have no data and do not show it.
   const showPlacement = !isCompleted || !!submission.placementDetails?.status
-  const steps = showPlacement
-    ? [...baseSteps, { key: 'placement', label: 'Placement' }]
-    : baseSteps
+
+  // 7th / 8th internship and start-up: MPRs -> Placement record -> Final report
+  // Other internships: Final report -> Placement record
+  const steps = needsMPR
+    ? [
+      regStep,
+      { key: 'mpr1', label: 'MPR 1' },
+      { key: 'mpr2', label: 'MPR 2' },
+      { key: 'mpr3', label: 'MPR 3' },
+      { key: 'midSem1', label: 'Mid Sem' },
+      ...(showPlacement ? [placementStep] : []),
+      finalStep
+    ]
+    : [
+      regStep,
+      finalStep,
+      ...(showPlacement ? [placementStep] : [])
+    ]
 
   return (
     <div className="rounded-xl border border-gray-200 overflow-hidden">
@@ -183,8 +188,8 @@ const StudentCard = ({ student, submissions, lastLogin }) => {
   const branchName = resolveBranch(student.branch)
   const mentorName = student.assignedMentor?.name || student.assignedMentor?.email?.split('@')[0] || null
   const completedCount = submissions.filter(s => s.currentStep === 'completed').length
-  const activeCount    = submissions.filter(s => s.currentStep !== 'completed').length
-  const hasAny         = submissions.length > 0
+  const activeCount = submissions.filter(s => s.currentStep !== 'completed').length
+  const hasAny = submissions.length > 0
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
@@ -255,9 +260,8 @@ const StudentCard = ({ student, submissions, lastLogin }) => {
             )}
           </div>
 
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-            open ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
-          }`}>
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${open ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
+            }`}>
             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </div>
         </div>
@@ -289,7 +293,7 @@ const StudentCard = ({ student, submissions, lastLogin }) => {
 const StudentProgressPage = () => {
   const { user } = useAuth()
   const role = user?.role
-  const [rows, setRows]       = useState([])
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({ search: '', branchCode: '' })
 
@@ -340,7 +344,7 @@ const StudentProgressPage = () => {
 
   const title = role === 'admin' ? 'All Students Progress'
     : role === 'dept_admin' ? 'Department Students Progress'
-    : 'My Students Progress'
+      : 'My Students Progress'
 
   return (
     <div className="space-y-6">
@@ -353,10 +357,10 @@ const StudentProgressPage = () => {
       {!loading && rows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total Students',     val: rows.length,                                                              bg: 'bg-blue-50',  border: 'border-blue-100',  text: 'text-blue-700'  },
+            { label: 'Total Students', val: rows.length, bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-700' },
             { label: 'Active Submissions', val: rows.filter(r => r.submissions.some(s => s.currentStep !== 'completed')).length, bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-700' },
-            { label: 'Completed',          val: rows.filter(r => r.submissions.some(s => s.currentStep === 'completed')).length, bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-700' },
-            { label: 'No Submission',      val: rows.filter(r => r.submissions.length === 0).length,                      bg: 'bg-gray-50',  border: 'border-gray-200',  text: 'text-gray-600'  },
+            { label: 'Completed', val: rows.filter(r => r.submissions.some(s => s.currentStep === 'completed')).length, bg: 'bg-green-50', border: 'border-green-100', text: 'text-green-700' },
+            { label: 'No Submission', val: rows.filter(r => r.submissions.length === 0).length, bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-600' },
           ].map(({ label, val, bg, border, text }) => (
             <div key={label} className={`${bg} border ${border} rounded-2xl p-4 text-center`}>
               <p className={`text-3xl font-bold ${text}`}>{val}</p>

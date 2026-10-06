@@ -20,6 +20,7 @@ const storage = multer.diskStorage({
     if (url.includes('/registration')) subFolder = 'registration';
     else if (url.includes('/mpr')) subFolder = 'mpr';
     else if (url.includes('/final-report')) subFolder = 'final-report';
+    else if (url.includes('/placement')) subFolder = 'placement';
     else if (url.includes('/bulk-upload') || url.includes('/bulk')) subFolder = 'bulk';
 
     const uploadPath = ensureDir(path.join(__dirname, '..', 'uploads', subFolder));
@@ -102,12 +103,24 @@ const registrationUpload = multer({
   }
 });
 
+// Placement record: offer letter / proof PDF, 2 MB, one file (reuses the PDF-only filter)
+const placementUpload = multer({
+  storage,
+  fileFilter: registrationFileFilter,
+  limits: {
+    fileSize: REGISTRATION_MAX_FILE_SIZE,
+    files: 1
+  }
+});
+
 // ─── Error handler middleware ─────────────────────────────────────────────────
 const handleUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    const isRegistration = (req.originalUrl || '').includes('/submit/registration');
-    const maxMB = isRegistration ? REGISTRATION_MAX_FILE_SIZE / (1024 * 1024) : 10;
-    const maxFiles = isRegistration ? 5 : 10;
+    const url = req.originalUrl || '';
+    const isRegistration = url.includes('/submit/registration');
+    const isPlacement = url.includes('/placement-details');
+    const maxMB = (isRegistration || isPlacement) ? REGISTRATION_MAX_FILE_SIZE / (1024 * 1024) : 10;
+    const maxFiles = isRegistration ? 5 : isPlacement ? 1 : 10;
 
     const messages = {
       LIMIT_FILE_SIZE: `File size too large. Maximum is ${maxMB}MB per file.`,
@@ -136,4 +149,4 @@ const getFileUrl = (filePath) => {
   return '/' + normalized;
 };
 
-module.exports = { upload, registrationUpload, handleUploadError, getFileUrl };
+module.exports = { upload, registrationUpload, placementUpload, handleUploadError, getFileUrl };

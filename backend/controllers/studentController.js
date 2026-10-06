@@ -438,12 +438,22 @@ const submitFinalReport = async (req, res) => {
       const required = ['mpr1', 'mpr2', 'mpr3', 'midSem1'];
       const approved = required.filter(t => mprSubs[t]?.status === 'approved');
       const allApproved = approved.length === 4;
+
+      // Placement record details must be approved first.
+      // (Older submissions that already started the final report are allowed to continue.)
+      const placementOk =
+        submission.placementDetails?.status === 'approved' || !!submission.finalReport?.submittedAt;
+
       canSubmit =
-        ['final_report_pending', 'final_report_rejected'].includes(currentStep) ||
-        (allApproved && ['mpr_submissions', 'registration_approved'].includes(currentStep));
-      if (!canSubmit) reason = allApproved
-        ? 'Registration must be approved first'
-        : `All 4 documents must be approved first. Currently: ${approved.length}/4`;
+        allApproved &&
+        placementOk &&
+        ['final_report_pending', 'final_report_rejected'].includes(currentStep);
+
+      if (!canSubmit) {
+        reason = !allApproved
+          ? `All 4 documents must be approved first. Currently: ${approved.length}/4`
+          : 'Your placement record details must be approved by your mentor before you can submit the final report';
+      }
     }
 
     if (!canSubmit) return errorResponse(res, reason || 'Cannot submit final report at this stage', 400);

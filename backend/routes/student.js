@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const { studentOnly } = require('../middleware/roleCheck');
-const { upload, registrationUpload, handleUploadError } = require('../middleware/upload');
+const { upload, registrationUpload, placementUpload, handleUploadError } = require('../middleware/upload');
 const { 
   validateRegistrationSubmission,
   validateMPRSubmission,
@@ -84,9 +84,14 @@ router.post('/submit/final-report',
   submitFinalReport
 );
 
-// Placement details form (last step after final report approval, raw data only)
+// Placement record details (after all MPR + Mid Sem are approved, before the final report)
+// Offer letter / proof is uploaded as a PDF, max 2 MB
 router.get('/placement-details', getMyPlacementDetails);
-router.post('/placement-details', submitPlacementDetails);
+router.post('/placement-details',
+  placementUpload.fields([{ name: 'offerProofDocument', maxCount: 1 }]),
+  handleUploadError,
+  submitPlacementDetails
+);
 
 // Update submission (for rejected ones)
 router.put('/submission/:id',

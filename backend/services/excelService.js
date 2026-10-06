@@ -808,7 +808,7 @@ class ExcelService {
       'Placed off campus or close campus ?': placed ? this.prettify(pd.placementType) : '',
       'Name of Company (please fill full name)': placed ? (pd.companyName || '') : '',
       'Placement Package (yearly in Lakhs) [put zero if not placed]': verified ? (placed ? this.toNum(pd.packageLPA) : 0) : '',
-      'Company Placement offer letter or any proof (email)': placed ? (pd.offerProof || '') : '',
+      'Company Placement offer letter or any proof (email)': placed ? (pd.offerProofDocument || pd.offerProof || '') : '',
       'Are you going for Higher study or Job Preparation?': verified ? this.prettify(pd.nextPlan) : '',
       'Cleared GATE / CAT /GRE EXAM or others Exam?': verified ? exams : '',
       'Upload Score Card (GATE / CAT / GRE /Other Exam)': verified ? (pd.scoreCardDetails || '') : ''

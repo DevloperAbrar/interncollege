@@ -236,7 +236,23 @@ const PlacementReviews = ({ onPendingCountChange }) => {
                   )}
                   {pd.hasPlacement && <Row label="Name of company" value={pd.companyName} />}
                   <Row label="Placement package (yearly, in lakhs)" value={String(pd.packageLPA ?? 0)} />
-                  {pd.hasPlacement && <Row label="Offer letter or proof" value={pd.offerProof} />}
+                  {pd.hasPlacement && (
+                    <Row
+                      label="Offer letter or proof"
+                      value={
+                        pd.offerProofDocument ? (
+                          <a
+                            href={pd.offerProofDocument}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 underline"
+                          >
+                            View offer letter (PDF)
+                          </a>
+                        ) : pd.offerProof
+                      }
+                    />
+                  )}
                   <Row label="Higher study or job preparation?" value={PLAN_LABEL[pd.nextPlan]} />
                   <Row label="Cleared GATE / CAT / GRE or other exam?" value={examsToText(pd)} />
                   {(pd.clearedExams || []).some((e) => e !== 'none') && (

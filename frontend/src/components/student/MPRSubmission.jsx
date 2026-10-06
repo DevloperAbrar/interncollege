@@ -162,7 +162,11 @@ const MPRSubmission = () => {
     )
   }
 
-  const canSubmitMPR = ['mpr_submissions', 'registration_approved'].includes(submission?.currentStep)
+  const canSubmitMPR = [
+    'mpr_submissions', 'registration_approved',
+    'placement_pending', 'placement_submitted', 'placement_rejected',
+    'final_report_pending', 'final_report_rejected'
+  ].includes(submission?.currentStep)
   if (!canSubmitMPR) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center">
@@ -287,22 +291,32 @@ const MPRSubmission = () => {
         </div>
 
         {/* CTA when all 4 approved */}
-        {approvedCount === TOTAL_DOCS && (
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white mb-8">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <Award className="h-8 w-8 mr-4" />
-                <div>
-                  <h3 className="text-xl font-bold">All documents approved! 🎉</h3>
-                  <p className="text-green-100">You can now submit your final report.</p>
+        {/* CTA when all 4 approved: placement record first, then final report */}
+        {approvedCount === TOTAL_DOCS && (() => {
+          const step = submission?.currentStep
+          const cta = ['final_report_pending', 'final_report_rejected'].includes(step)
+            ? { text: 'Your placement record is approved. You can now submit your final report.', button: 'Submit Final Report', path: '/student/final-report' }
+            : step === 'placement_submitted'
+              ? { text: 'Your placement record details are under mentor review. The final report unlocks once they are approved.', button: 'View Placement Record', path: '/student/placement' }
+              : { text: 'Next, fill in your placement record details and upload your offer letter. The final report unlocks after your mentor approves them.', button: 'Fill Placement Record Details', path: '/student/placement' }
+
+          return (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white mb-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Award className="h-8 w-8 mr-4" />
+                  <div>
+                    <h3 className="text-xl font-bold">All documents approved! 🎉</h3>
+                    <p className="text-green-100">{cta.text}</p>
+                  </div>
                 </div>
+                <button onClick={() => navigate(cta.path)} className="bg-white text-green-600 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition-colors">
+                  {cta.button}
+                </button>
               </div>
-              <button onClick={() => navigate('/student/final-report')} className="bg-white text-green-600 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition-colors">
-                Submit Final Report
-              </button>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Guidelines */}
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-6">
@@ -314,7 +328,7 @@ const MPRSubmission = () => {
               <h4 className="text-lg font-semibold text-amber-900 mb-2">MPR Submission Guidelines</h4>
               <ul className="text-amber-800 leading-relaxed space-y-1 text-sm">
                 <li>• Submit all 3 MPRs and 1 Mid-Semester Evaluation ({TOTAL_DOCS} documents total)</li>
-                <li>• Each document must be approved by your mentor before the final report is unlocked</li>
+                <li>• Each document must be approved by your mentor before the placement record details and final report are unlocked</li>
                 <li>• Only PDF files are accepted</li>
                 <li>• You can resubmit rejected documents with corrections</li>
               </ul>

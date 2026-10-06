@@ -58,8 +58,22 @@ export const studentService = {
     return response.data
   },
 
-  submitPlacementDetails: async (payload) => {
-    const response = await api.post('/student/placement-details', payload)
+  // Placement record details (after all MPR + Mid Sem are approved, before the final report)
+  getPlacementDetails: async () => {
+    const response = await api.get('/student/placement-details')
+    return response.data
+  },
+
+  // multipart: includes the offer letter / proof PDF (max 2 MB)
+  submitPlacementDetails: async (formData, onUploadProgress) => {
+    const response = await apiFormData.post('/student/placement-details', formData, {
+      onUploadProgress: (progressEvent) => {
+        if (onUploadProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          onUploadProgress(percent)
+        }
+      }
+    })
     return response.data
   },
 

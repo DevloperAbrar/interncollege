@@ -307,13 +307,11 @@ const FinalReportForm = () => {
     const approvedMPRs = allMPRTypes.filter(t => mprSubmissions[t]?.status === 'approved')
     const allFourApproved = approvedMPRs.length === 4
 
-    canSubmitFinalReport =
-      ['final_report_pending', 'final_report_rejected'].includes(submission.currentStep) ||
-      (allFourApproved && ['mpr_submissions', 'registration_approved'].includes(submission.currentStep))
+    canSubmitFinalReport = ['final_report_pending', 'final_report_rejected'].includes(submission.currentStep)
 
     if (!canSubmitFinalReport) {
       reasonMessage = allFourApproved
-        ? 'Registration must be approved first'
+        ? 'Your placement record details must be approved by your mentor first'
         : `All 4 MPR submissions must be approved first. Currently approved: ${approvedMPRs.length}/4`
     }
   }
@@ -329,12 +327,12 @@ const FinalReportForm = () => {
 
     const allFourMPRsApproved = approvedMPRCount === 4
 
-    canSubmitFinalReport =
-      ['final_report_pending', 'final_report_rejected'].includes(submission.currentStep) ||
-      (allFourMPRsApproved && ['mpr_submissions', 'registration_approved'].includes(submission.currentStep))
+    canSubmitFinalReport = ['final_report_pending', 'final_report_rejected'].includes(submission.currentStep)
 
     if (!canSubmitFinalReport) {
-      reasonMessage = `All 4 MPR submissions must be approved first. Currently approved: ${approvedMPRCount}/4`
+      reasonMessage = allFourMPRsApproved
+        ? 'Your placement record details must be approved by your mentor first'
+        : `All 4 MPR submissions must be approved first. Currently approved: ${approvedMPRCount}/4`
     }
   }
 
@@ -366,6 +364,14 @@ const FinalReportForm = () => {
                     Submit MPR Documents
                   </button>
                 )}
+              {['placement_pending', 'placement_submitted', 'placement_rejected'].includes(submission.currentStep) && (
+                <button
+                  onClick={() => navigate('/student/placement')}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors ml-3"
+                >
+                  Go to Placement Record Details
+                </button>
+              )}
             </div>
           </div>
         </div>

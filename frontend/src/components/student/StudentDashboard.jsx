@@ -261,21 +261,24 @@ const StudentDashboard = () => {
     return iconMap[semesterType] || Building
   }
 
-  const getStepDescription = (currentStep, semesterType) => {
+  const getStepDescription = (currentStep, semesterType, submission) => {
+    const isMpr = ['7th_internship', '8th_internship', '8th_project'].includes(semesterType)
     const stepMap = {
       'registration_pending': 'Registration under review',
       'registration_rejected': 'Registration needs revision',
       'registration_approved': semesterType === '6th_internship' || semesterType === 'any_internship'
         ? 'Ready for final report'
-        : semesterType === '8th_project'
-          ? 'Ready for MPR submissions'
-          : 'Ready for MPR submissions',
+        : 'Ready for MPR submissions',
       'mpr_submissions': 'MPR submissions in progress',
-      'final_report_pending': 'Final report under review',
+      'final_report_pending': submission?.finalReport?.submittedAt
+        ? 'Final report under review'
+        : 'Placement record approved, final report pending',
       'final_report_rejected': 'Final report needs revision',
-      'placement_pending': 'Final report approved, placement details pending',
-      'placement_submitted': 'Placement details under review',
-      'placement_rejected': 'Placement details need revision',
+      'placement_pending': isMpr
+        ? 'MPRs approved, placement record details pending'
+        : 'Final report approved, placement record details pending',
+      'placement_submitted': 'Placement record details under review',
+      'placement_rejected': 'Placement record details need revision',
       'completed': 'Successfully completed!'
     }
     return stepMap[currentStep] || 'In progress'
@@ -305,25 +308,27 @@ const StudentDashboard = () => {
           t => mprData[t]?.status === 'approved'
         )
         if (allFourApproved) {
-          return { text: 'Submit Final Report', link: '/student/final-report', color: 'green' }
+          return { text: 'Fill Placement Record Details', link: '/student/placement', color: 'green' }
         }
         return { text: 'Continue MPR Submissions', link: '/student/mpr', color: 'purple' }
       }
 
       case 'final_report_pending':
-        return { text: 'View Final Report Status', link: '/student/progress', color: 'blue' }
+        return submission?.finalReport?.submittedAt
+          ? { text: 'View Final Report Status', link: '/student/progress', color: 'blue' }
+          : { text: 'Submit Final Report', link: '/student/final-report', color: 'green' }
 
       case 'final_report_rejected':
         return { text: 'Revise Final Report', link: '/student/final-report', color: 'orange' }
 
       case 'placement_pending':
-        return { text: 'Fill Placement Details', link: '/student/placement', color: 'green' }
+        return { text: 'Fill Placement Record Details', link: '/student/placement', color: 'green' }
 
       case 'placement_submitted':
-        return { text: 'View Placement Details', link: '/student/placement', color: 'blue' }
+        return { text: 'View Placement Record Details', link: '/student/placement', color: 'blue' }
 
       case 'placement_rejected':
-        return { text: 'Revise Placement Details', link: '/student/placement', color: 'orange' }
+        return { text: 'Revise Placement Record Details', link: '/student/placement', color: 'orange' }
 
       default:
         return null
@@ -357,8 +362,11 @@ const StudentDashboard = () => {
     availableSemesters = []
   } = dashboardData || {}
 
-  // Steps after the final report is approved (placement details form)
+  // Placement record steps
   const inPlacementPhase = ['placement_pending', 'placement_submitted', 'placement_rejected'].includes(currentStep)
+
+  // 7th / 8th internship and start-up: MPRs -> Placement record -> Final report
+  const isMprFlow = ['7th_internship', '8th_internship', '8th_project'].includes(semesterType)
 
   // ── Determine if all semesters are done ──────────────────────────────────
   const allDone = !hasSubmission && completedSubmissions.length > 0 && availableSemesters.length === 0
@@ -599,7 +607,7 @@ const StudentDashboard = () => {
                             return <Icon className="h-5 w-5 text-blue-600 mr-2" />
                           })()}
                           <span className="text-lg font-semibold text-gray-900">
-                            {getStepDescription(currentStep, semesterType)}
+                            {getStepDescription(currentStep, semesterType, submission)}
                           </span>
                         </div>
                       </div>
@@ -696,62 +704,49 @@ const StudentDashboard = () => {
                         </div>
                       </div>
 
-                      {/* MPR Step — 7th, 8th internship, 8th project */}
-                      {(semesterType === '7th_internship' || semesterType === '8th_internship' || semesterType === '8th_project') && (
-                        <div className="flex items-center mb-4">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 ${currentStep === 'mpr_submissions'
-                            ? 'bg-yellow-100 text-yellow-600'
-                            : currentStep === 'final_report_pending' || currentStep === 'final_report_rejected' || inPlacementPhase || currentStep === 'completed'
-                              ? 'bg-green-100 text-green-600'
-                              : 'bg-gray-100 text-gray-400'
-                            }`}>
-                            {currentStep === 'mpr_submissions' ? '⏳' :
-                              (currentStep === 'final_report_pending' || currentStep === 'final_report_rejected' || inPlacementPhase || currentStep === 'completed') ? '✅' : '⭕'}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">MPR Submissions</h4>
-                            <p className="text-sm text-gray-600">Submit monthly progress reports and evaluations</p>
-                          </div>
-                        </div>
-                      )}
+                      {(() => {
+                        const afterMpr = ['final_report_pending', 'final_report_rejected', 'placement_pending', 'placement_submitted', 'placement_rejected', 'completed'].includes(currentStep)
 
-                      {/* Final Report Step */}
-                      <div className="flex items-center mb-4">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 ${currentStep === 'final_report_pending' || currentStep === 'final_report_rejected'
-                          ? 'bg-yellow-100 text-yellow-600'
-                          : inPlacementPhase || currentStep === 'completed'
-                            ? 'bg-green-100 text-green-600'
-                            : 'bg-gray-100 text-gray-400'
-                          }`}>
-                          {currentStep === 'final_report_pending' ? '⏳' :
-                            currentStep === 'final_report_rejected' ? '❌' :
-                              (inPlacementPhase || currentStep === 'completed') ? '✅' : '⭕'}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">Final Report</h4>
-                          <p className="text-sm text-gray-600">Complete final submission and documentation</p>
-                        </div>
-                      </div>
+                        const mprState = currentStep === 'mpr_submissions' ? 'active' : afterMpr ? 'done' : 'todo'
 
-                      {/* Placement Details Step */}
-                      <div className="flex items-center">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 ${currentStep === 'placement_pending' || currentStep === 'placement_submitted'
-                          ? 'bg-yellow-100 text-yellow-600'
-                          : currentStep === 'placement_rejected'
-                            ? 'bg-red-100 text-red-600'
-                            : currentStep === 'completed'
-                              ? 'bg-green-100 text-green-600'
-                              : 'bg-gray-100 text-gray-400'
-                          }`}>
-                          {currentStep === 'placement_pending' || currentStep === 'placement_submitted' ? '⏳' :
-                            currentStep === 'placement_rejected' ? '❌' :
-                              currentStep === 'completed' ? '✅' : '⭕'}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">Placement Details</h4>
-                          <p className="text-sm text-gray-600">Placement and future plan, verified by your mentor</p>
-                        </div>
-                      </div>
+                        const placementState = currentStep === 'placement_rejected' ? 'rejected'
+                          : ['placement_pending', 'placement_submitted'].includes(currentStep) ? 'active'
+                            : isMprFlow
+                              ? (['final_report_pending', 'final_report_rejected', 'completed'].includes(currentStep) ? 'done' : 'todo')
+                              : (currentStep === 'completed' ? 'done' : 'todo')
+
+                        const finalState = currentStep === 'final_report_rejected' ? 'rejected'
+                          : currentStep === 'final_report_pending' ? 'active'
+                            : isMprFlow
+                              ? (currentStep === 'completed' ? 'done' : 'todo')
+                              : ((inPlacementPhase || currentStep === 'completed') ? 'done' : 'todo')
+
+                        const circle = {
+                          done: 'bg-green-100 text-green-600',
+                          active: 'bg-yellow-100 text-yellow-600',
+                          rejected: 'bg-red-100 text-red-600',
+                          todo: 'bg-gray-100 text-gray-400'
+                        }
+                        const icon = { done: '✅', active: '⏳', rejected: '❌', todo: '⭕' }
+
+                        const row = (key, title, desc, st) => (
+                          <div key={key} className="flex items-center mb-4">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-4 ${circle[st]}`}>
+                              {icon[st]}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">{title}</h4>
+                              <p className="text-sm text-gray-600">{desc}</p>
+                            </div>
+                          </div>
+                        )
+
+                        const mprRow = row('mpr', 'MPR Submissions', 'Submit monthly progress reports and evaluations', mprState)
+                        const placementRow = row('placement', 'Placement Record Details', 'Placement, future plan and offer letter, verified by your mentor', placementState)
+                        const finalRow = row('final', 'Final Report', 'Complete final submission and documentation', finalState)
+
+                        return isMprFlow ? [mprRow, placementRow, finalRow] : [finalRow, placementRow]
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1008,8 +1003,12 @@ const StudentDashboard = () => {
               <div className="flex items-center p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
                 <CheckCircle className="h-8 w-8 text-green-500 mr-4 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-gray-900">Final report approved</p>
-                  <p className="text-sm text-gray-600">One last step: fill in your placement details so your mentor can verify and complete your submission</p>
+                  <p className="font-semibold text-gray-900">{isMprFlow ? 'All MPR documents approved' : 'Final report approved'}</p>
+                  <p className="text-sm text-gray-600">
+                    {isMprFlow
+                      ? 'Next step: fill in your placement record details and upload your offer letter. The final report unlocks after your mentor approves them'
+                      : 'One last step: fill in your placement record details so your mentor can verify and complete your submission'}
+                  </p>
                 </div>
               </div>
             )}
@@ -1017,8 +1016,21 @@ const StudentDashboard = () => {
               <div className="flex items-center p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border border-yellow-100">
                 <Clock className="h-8 w-8 text-yellow-500 mr-4 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-gray-900">Placement details under review</p>
-                  <p className="text-sm text-gray-600">Your mentor is verifying your placement details. Your submission completes once they approve</p>
+                  <p className="font-semibold text-gray-900">Placement record details under review</p>
+                  <p className="text-sm text-gray-600">
+                    {isMprFlow
+                      ? 'Your mentor is verifying your placement record. The final report unlocks once they approve'
+                      : 'Your mentor is verifying your placement record. Your submission completes once they approve'}
+                  </p>
+                </div>
+              </div>
+            )}
+            {hasSubmission && currentStep === 'final_report_pending' && !submission?.finalReport?.submittedAt && (
+              <div className="flex items-center p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100">
+                <CheckCircle className="h-8 w-8 text-green-500 mr-4 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-gray-900">Placement record approved</p>
+                  <p className="text-sm text-gray-600">You can now submit your final report</p>
                 </div>
               </div>
             )}

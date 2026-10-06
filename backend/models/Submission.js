@@ -41,7 +41,8 @@ const placementDetailsSchema = new mongoose.Schema({
   placementType: { type: String, enum: ['off_campus', 'close_campus'] },
   companyName: { type: String, default: '' },
   packageLPA: { type: Number, min: 0, default: 0 },
-  offerProof: { type: String, default: '' },
+  offerProof: { type: String, default: '' },          // legacy text proof (old records)
+  offerProofDocument: { type: String, default: '' },  // Drive link of the uploaded offer letter / proof PDF
   nextPlan: { type: String, enum: ['higher_study', 'job_preparation', 'not_applicable'] },
   clearedExams: [{ type: String, enum: ['none', 'gate', 'cat', 'gre', 'other'] }],
   clearedExamOther: { type: String, default: '' },

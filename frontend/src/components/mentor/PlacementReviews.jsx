@@ -234,7 +234,23 @@ const PlacementReviews = ({ onPendingCountChange }) => {
                   {pd.hasPlacement && (
                     <Row label="Placed off campus or close campus?" value={TYPE_LABEL[pd.placementType]} />
                   )}
-                  {pd.hasPlacement && <Row label="Name of company" value={pd.companyName} />}
+                                    {pd.hasPlacement && (
+                    <Row
+                      label="Offer letter or proof"
+                      value={
+                        pd.offerProofDocument ? (
+                          <a
+                            href={pd.offerProofDocument}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 underline"
+                          >
+                            View offer letter (PDF)
+                          </a>
+                        ) : pd.offerProof
+                      }
+                    />
+                  )}
                   <Row label="Placement package (yearly, in lakhs)" value={String(pd.packageLPA ?? 0)} />
                   {pd.hasPlacement && (
                     <Row
@@ -258,7 +274,7 @@ const PlacementReviews = ({ onPendingCountChange }) => {
                   {(pd.clearedExams || []).some((e) => e !== 'none') && (
                     <Row label="Score card details" value={pd.scoreCardDetails} />
                   )}
-                  <Row label="Internship / project" value={selected.organization} />
+                  <Row label="Internship / start-up" value={selected.organization} />
                   <Row label="Submitted on" value={formatDateTime(pd.submittedAt)} />
                   {!isPending && pd.reviewedAt && <Row label="Reviewed on" value={formatDateTime(pd.reviewedAt)} />}
                   {!isPending && pd.feedback && <Row label="Your feedback" value={pd.feedback} />}
@@ -269,7 +285,9 @@ const PlacementReviews = ({ onPendingCountChange }) => {
                 <div className="px-6 pb-2 pt-3 border-t border-gray-100">
                   <label className="block text-sm font-medium text-gray-900 mb-1">Feedback</label>
                   <p className="text-xs text-gray-500 mb-2">
-                    Required if you reject. Approving marks this internship or project as completed.
+                    {['7th_internship', '8th_internship', '8th_project'].includes(selected.semesterType)
+                      ? 'Required if you reject. Approving unlocks the final report for this student.'
+                      : 'Required if you reject. Approving marks this internship as completed.'}
                   </p>
                   <textarea
                     rows={3}

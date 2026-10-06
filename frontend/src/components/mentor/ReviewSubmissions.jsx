@@ -355,9 +355,12 @@ const FinalReportMarks = ({ marks, setMarks }) => {
     (marks.socialIndustrialRelevance || 0) +
     (marks.questionAnswer || 0);
 
-  const grandTotal =
+  const diaryOutcomesTotal =
     (marks.dailyDiary || 0) +
-    (marks.projectOutcomes || 0) +
+    (marks.projectOutcomes || 0);
+
+  const grandTotal =
+    diaryOutcomesTotal +
     reportTotal +
     presentationTotal;
 
@@ -365,20 +368,26 @@ const FinalReportMarks = ({ marks, setMarks }) => {
     <div className="bg-green-50 p-6 rounded-lg border border-green-200 space-y-6">
       <h5 className="font-semibold text-gray-900 mb-4">Final Report Marks Assignment (Max: 250)</h5>
 
-      {/* Daily Diary and Outcomes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <MarksInput
-          label="Internship/Start-up Daily Diary"
-          value={marks.dailyDiary || 0}
-          onChange={(val) => updateMarks('dailyDiary', val)}
-          max={20}
-        />
-        <MarksInput
-          label="Internship/Start-up Outcomes"
-          value={marks.projectOutcomes || 0}
-          onChange={(val) => updateMarks('projectOutcomes', val)}
-          max={30}
-        />
+      {/* Daily Diary and Outcomes (50 marks) */}
+      <div>
+        <h6 className="font-medium text-gray-900 mb-3">Internship/Start-up Diary & Outcomes (Max: 50)</h6>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <MarksInput
+            label="Internship/Start-up Daily Diary"
+            value={marks.dailyDiary || 0}
+            onChange={(val) => updateMarks('dailyDiary', val)}
+            max={20}
+          />
+          <MarksInput
+            label="Internship/Start-up Outcomes"
+            value={marks.projectOutcomes || 0}
+            onChange={(val) => updateMarks('projectOutcomes', val)}
+            max={30}
+          />
+        </div>
+        <div className="mt-3 text-right">
+          <span className="font-semibold text-green-700">Diary & Outcomes Subtotal: {diaryOutcomesTotal.toFixed(1)} / 50</span>
+        </div>
       </div>
 
       {/* Final Report Section (100 marks) */}

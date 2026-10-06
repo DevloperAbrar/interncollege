@@ -1,16 +1,42 @@
 import React, { useState, useEffect } from 'react'
 import { deptAdminService } from '../../services/deptAdminService'
-import { Users, GitBranch, UserCheck, BookOpen } from 'lucide-react'
+import { Users, GitBranch, UserCheck, BookOpen, Download } from 'lucide-react'
 
 const DeptAdminDashboard = () => {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
 
   useEffect(() => {
     deptAdminService.getDashboard()
       .then(res => { if (res.success) setData(res.data) })
       .finally(() => setLoading(false))
   }, [])
+
+  const handleExport = async () => {
+    try {
+      setExporting(true)
+      setExportError('')
+      const response = await deptAdminService.exportStudents()
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `department_students_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Export error:', error)
+      setExportError('Could not export student data. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   if (loading) return <div className="flex justify-center py-16"><div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
 
@@ -22,10 +48,26 @@ const DeptAdminDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Department Dashboard</h1>
-        <p className="text-gray-600">{data?.department?.name || 'Your Department'}</p>
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Department Dashboard</h1>
+          <p className="text-gray-600">{data?.department?.name || 'Your Department'}</p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="btn-primary flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {exporting ? 'Exporting...' : 'Export Student Data'}
+        </button>
       </div>
+
+      {exportError && (
+        <div className="border border-red-200 bg-red-50 rounded-md px-4 py-3">
+          <p className="text-sm text-red-700">{exportError}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {stats.map(({ label, value, icon: Icon, color }) => (

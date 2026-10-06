@@ -20,4 +20,8 @@ export const deptAdminService = {
 
   unassignStudent: async (studentId) =>
     (await api.put(`/dept-admin/students/${studentId}/unassign`)).data,
+
+  // Excel report of every student in the department
+  exportStudents: async () =>
+    await api.get('/dept-admin/export/students', { responseType: 'blob' }),
 }

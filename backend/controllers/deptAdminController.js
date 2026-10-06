@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Branch = require('../models/Branch');
 const Department = require('../models/Department');
 const { successResponse, errorResponse } = require('../utils/responseHelper');
+const excelService = require('../services/excelService');
 
 // ─── BRANCH MANAGEMENT ───────────────────────────────────────────────────────
 
@@ -354,5 +355,20 @@ const unassignStudent = async (req, res) => {
     errorResponse(res, 'Failed to unassign student', 500);
   }
 };
+
+// GET /api/dept-admin/export/students — Excel report of every student in this department
+const exportDepartmentStudents = async (req, res) => {
+  try {
+    const exportData = await excelService.exportDepartmentStudentData(req.user.department);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${exportData.filename}"`);
+    res.send(exportData.buffer);
+  } catch (error) {
+    console.error('Export department students error:', error);
+    errorResponse(res, 'Failed to export student data', 500);
+  }
+};
+
 module.exports = { getBranches, createBranch, deleteBranch, getMentors, getMentorStudents, createMentor, updateMentor, deleteMentor, getDashboard, updateBranch,
-  getAllStudentsForAssignment, assignStudentsToMentor, unassignStudent };
+  getAllStudentsForAssignment, assignStudentsToMentor, unassignStudent, exportDepartmentStudents };

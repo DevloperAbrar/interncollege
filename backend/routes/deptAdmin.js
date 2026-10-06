@@ -6,7 +6,8 @@ const {
   getDashboard,
   getBranches, createBranch, updateBranch, deleteBranch,
   getMentors, createMentor, updateMentor, deleteMentor, getMentorStudents,
-  getAllStudentsForAssignment, assignStudentsToMentor, unassignStudent   // NEW
+  getAllStudentsForAssignment, assignStudentsToMentor, unassignStudent,   // NEW
+  exportDepartmentStudents
 } = require('../controllers/deptAdminController');
 
 router.use(auth);
@@ -25,5 +26,6 @@ router.put('/mentors/:id', updateMentor);
 router.get('/students', getAllStudentsForAssignment);
 router.post('/assign-students', assignStudentsToMentor);
 router.put('/students/:id/unassign', unassignStudent);
+router.get('/export/students', exportDepartmentStudents);
 
 module.exports = router;

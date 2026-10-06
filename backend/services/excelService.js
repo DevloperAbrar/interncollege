@@ -772,6 +772,21 @@ class ExcelService {
     return this.prettify(entry.status) || 'Pending';
   }
 
+  // Branch code of a student: saved branchCode first, then parsed from the college email
+  // ("23io10mo34@mitsgwl.ac.in" -> "IO"), then any plain-text branch value
+  getBranchCode(student = {}, submission = {}) {
+    if (student.branchCode) return String(student.branchCode).toUpperCase();
+
+    const email = String(student.email || submission.email || '').trim().toLowerCase();
+    const match = email.match(/^\d{2}([a-z]{2})\d/);
+    if (match) return match[1].toUpperCase();
+
+    const branch = student.branch || submission.branch;
+    if (branch && typeof branch === 'string' && !/^[a-f0-9]{24}$/i.test(branch)) return branch;
+    if (branch && typeof branch === 'object' && branch.name) return branch.name;
+    return '';
+  }
+
   sortSubmissionsByEnrollment(submissions) {
     return submissions.sort((a, b) => {
       const ea = a.student?.enrollmentNo || '';
@@ -848,7 +863,7 @@ class ExcelService {
       // ===== STUDENT =====
       'Student Name': student.name || submission.studentName || '',
       'Enrollment No': student.enrollmentNo || submission.enrollmentNo || '',
-      'Branch': student.branch || submission.branch || '',
+      'Branch': this.getBranchCode(student, submission),
       'Email': student.email || submission.email || '',
       'Student Mobile Number': reg.studentMobileNumber || student.phone || '',
 
@@ -1707,6 +1722,63 @@ class ExcelService {
       throw new Error('Failed to export student data: ' + error.message);
     }
   }
+
+    // Export every student of a department (students whose mentor belongs to the department)
+    async exportDepartmentStudentData(departmentId) {
+      try {
+        const Department = require('../models/Department');
+        const dept = await Department.findById(departmentId).select('name').lean();
+        const deptName = dept?.name || 'Department';
+  
+        const mentors = await User.find({ role: 'mentor', department: departmentId })
+          .select('name email')
+          .lean();
+  
+        const mentorMap = {};
+        mentors.forEach((m) => {
+          mentorMap[m._id.toString()] = { name: m.name, email: m.email, department: deptName };
+        });
+  
+        const students = await User.find({
+          role: 'student',
+          assignedMentor: { $in: mentors.map((m) => m._id) }
+        })
+          .select('_id assignedMentor')
+          .lean();
+  
+        // student id -> mentor info (with department name)
+        const studentMentor = {};
+        students.forEach((s) => {
+          studentMentor[s._id.toString()] = mentorMap[String(s.assignedMentor)] || {};
+        });
+  
+        const label = deptName.replace(/[^a-zA-Z0-9]+/g, '_');
+        const filename = `${label}_Students_${moment().format('DD-MM-YYYY')}.xlsx`;
+  
+        if (students.length === 0) {
+          return { buffer: this.buildProgressWorkbook([], 'Student Data'), filename, totalRecords: 0 };
+        }
+  
+        const submissions = await Submission.find({ student: { $in: students.map((s) => s._id) } })
+          .populate('student', 'name enrollmentNo email branch branchCode phone')
+          .lean();
+  
+        const rows = this.sortSubmissionsByEnrollment(
+          submissions.filter((s) => s.student)
+        ).map((submission) =>
+          this.buildProgressRow(submission, studentMentor[submission.student._id.toString()] || {}, true)
+        );
+  
+        const buffer = this.buildProgressWorkbook(rows, 'Student Data');
+  
+        console.log(`✅ Department export done: ${rows.length} rows for ${students.length} students`);
+  
+        return { buffer, filename, totalRecords: rows.length };
+      } catch (error) {
+        console.error('Error in exportDepartmentStudentData:', error);
+        throw new Error('Failed to export department student data: ' + error.message);
+      }
+    }
 }
 
 module.exports = new ExcelService();
